@@ -1,6 +1,7 @@
 using Atelier.Web.Data;
 using Atelier.Web.Domain.Common;
 using Atelier.Web.Domain.PlanReview;
+using Atelier.Web.Domain.Platform;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,7 @@ public sealed class ModelShapeTests
         var model = context.Model;
         var weeklyReportEntity = model.FindEntityType(typeof(WeeklyReport));
         var monthlyPlanEntity = model.FindEntityType(typeof(MonthlyPlan));
+        var teamEntity = model.FindEntityType(typeof(Team));
 
         monthlyPlanEntity.Should().NotBeNull();
         model.FindEntityType(typeof(Goal)).Should().NotBeNull();
@@ -52,6 +54,7 @@ public sealed class ModelShapeTests
         model.FindEntityType(typeof(Blocker)).Should().NotBeNull();
         model.FindEntityType(typeof(MonthlyReview)).Should().NotBeNull();
         model.FindEntityType(typeof(MonthlyPlanRevision)).Should().NotBeNull();
+        teamEntity.Should().NotBeNull();
 
         weeklyReportEntity!
             .GetIndexes()
@@ -68,5 +71,11 @@ public sealed class ModelShapeTests
                 index.IsUnique &&
                 index.Properties.Select(property => property.Name)
                     .SequenceEqual(new[] { nameof(MonthlyPlan.WorkspaceId), nameof(MonthlyPlan.PlanMonth), nameof(MonthlyPlan.IsPrimary) }));
+
+        teamEntity!
+            .FindProperty(nameof(Team.TeamLeadUserId))!
+            .IsNullable
+            .Should()
+            .BeTrue();
     }
 }

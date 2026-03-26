@@ -8,7 +8,7 @@ public sealed class Team
 
     public string Name { get; set; } = string.Empty;
 
-    public Guid TeamLeadUserId { get; set; }
+    public Guid? TeamLeadUserId { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 
