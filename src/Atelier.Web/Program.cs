@@ -16,7 +16,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AtelierDbContext>();
-    dbContext.Database.EnsureCreated();
+    SeedData.EnsureSchemaAsync(dbContext).GetAwaiter().GetResult();
     SeedData.InitializeAsync(dbContext, app.Configuration).GetAwaiter().GetResult();
 }
 

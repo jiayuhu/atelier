@@ -7,7 +7,19 @@ namespace Atelier.Web.Tests.Fixtures;
 
 public sealed class TestAppFactory : WebApplicationFactory<Program>
 {
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"atelier-tests-{Guid.NewGuid():N}.db");
+    private readonly string _databasePath;
+
+    public TestAppFactory()
+    {
+        _databasePath = Path.Combine(Path.GetTempPath(), $"atelier-tests-{Guid.NewGuid():N}.db");
+    }
+
+    private TestAppFactory(string databasePath)
+    {
+        _databasePath = databasePath;
+    }
+
+    public static TestAppFactory ForDatabase(string databasePath) => new(databasePath);
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -27,7 +39,13 @@ public sealed class TestAppFactory : WebApplicationFactory<Program>
 
         if (disposing && File.Exists(_databasePath))
         {
-            File.Delete(_databasePath);
+            try
+            {
+                File.Delete(_databasePath);
+            }
+            catch (IOException)
+            {
+            }
         }
     }
 }
