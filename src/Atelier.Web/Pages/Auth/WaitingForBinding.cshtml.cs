@@ -9,7 +9,7 @@ public sealed class WaitingForBindingModel : PageModel
 {
     public string EnterpriseWeChatUserId { get; private set; } = string.Empty;
 
-    public string BindingPath { get; private set; } = "/Settings?handler=Bind";
+    public string BindingPath { get; private set; } = "/Settings";
 
     public void OnGet(string? enterpriseWeChatUserId = null)
     {
@@ -17,6 +17,8 @@ public sealed class WaitingForBindingModel : PageModel
             ?? User.FindFirst(EnterpriseWeChatAuthService.EnterpriseWeChatUserIdClaimType)?.Value
             ?? string.Empty;
 
-        BindingPath = "/Settings?handler=Bind";
+        BindingPath = string.IsNullOrWhiteSpace(EnterpriseWeChatUserId)
+            ? "/Settings"
+            : $"/Settings?enterpriseWeChatUserId={Uri.EscapeDataString(EnterpriseWeChatUserId)}";
     }
 }

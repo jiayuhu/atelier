@@ -26,14 +26,24 @@ public sealed class IndexModel : PageModel
 
     public string? StatusMessage { get; private set; }
 
-    public async Task OnGetAsync()
+    public async Task OnGetAsync(string? enterpriseWeChatUserId = null)
     {
+        Input.EnterpriseWeChatUserId = enterpriseWeChatUserId ?? Input.EnterpriseWeChatUserId;
         await LoadUsersAsync();
     }
 
     public async Task<IActionResult> OnPostBindAsync(CancellationToken cancellationToken)
     {
-        await _userBindingService.BindAsync(Input.EnterpriseWeChatUserId, Input.UserId, Domain.Platform.UserRole.Administrator, cancellationToken);
+        try
+        {
+            await _userBindingService.BindAsync(Input.EnterpriseWeChatUserId, Input.UserId, Domain.Platform.UserRole.Administrator, cancellationToken);
+        }
+        catch (UserBindingException exception)
+        {
+            StatusMessage = exception.Message;
+            await LoadUsersAsync();
+            return Page();
+        }
 
         StatusMessage = "User bound successfully.";
         await LoadUsersAsync();

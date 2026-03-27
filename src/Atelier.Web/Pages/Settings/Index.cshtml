@@ -4,6 +4,7 @@
 <main>
     <h1>Settings</h1>
     <p>Administrators can bind a waiting Enterprise WeChat identity to an internal account.</p>
+    <p>Open this page with <code>?enterpriseWeChatUserId=...</code> to prefill a pending identity.</p>
 
     <form method="post" asp-page-handler="Bind">
         <label asp-for="Input.EnterpriseWeChatUserId">Enterprise WeChat user</label>

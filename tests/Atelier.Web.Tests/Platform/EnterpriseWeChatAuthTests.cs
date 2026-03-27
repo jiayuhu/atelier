@@ -3,6 +3,7 @@ using Atelier.Web.Application.Auth;
 using Atelier.Web.Application.Platform;
 using Atelier.Web.Data;
 using Atelier.Web.Domain.Platform;
+using Atelier.Web.Pages.Settings;
 using Atelier.Web.Tests.Fixtures;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -136,7 +137,57 @@ public sealed class EnterpriseWeChatAuthTests : IClassFixture<TestAppFactory>
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         html.Should().Contain("wx-user-1");
-        html.Should().Contain("/Settings?handler=Bind");
+        html.Should().Contain("/Settings?enterpriseWeChatUserId=wx-user-1");
+    }
+
+    [Fact]
+    public async Task SettingsPage_PrefillsPendingEnterpriseWeChatUserId()
+    {
+        await using var context = await CreateContextAsync();
+        var model = new IndexModel(context, new UserBindingService(context));
+
+        await model.OnGetAsync("wx-user-1");
+
+        model.Input.EnterpriseWeChatUserId.Should().Be("wx-user-1");
+    }
+
+    [Fact]
+    public async Task BindAsync_RejectsEmptyEnterpriseWeChatUserId()
+    {
+        await using var context = await CreateContextAsync();
+        var userId = await SeedUserAsync(context, enterpriseWeChatUserId: "legacy-id");
+        var service = new UserBindingService(context);
+
+        var act = async () => await service.BindAsync("   ", userId, actorRole: UserRole.Administrator);
+
+        await act.Should().ThrowAsync<UserBindingException>()
+            .WithMessage("Enterprise WeChat user id is required.");
+    }
+
+    [Fact]
+    public async Task BindAsync_RejectsEmptyUserSelection()
+    {
+        await using var context = await CreateContextAsync();
+        var service = new UserBindingService(context);
+
+        var act = async () => await service.BindAsync("wx-user-1", Guid.Empty, actorRole: UserRole.Administrator);
+
+        await act.Should().ThrowAsync<UserBindingException>()
+            .WithMessage("Select a user to bind.");
+    }
+
+    [Fact]
+    public async Task BindAsync_RejectsDuplicateEnterpriseWeChatBinding()
+    {
+        await using var context = await CreateContextAsync();
+        await SeedUserAsync(context, enterpriseWeChatUserId: "wx-user-1");
+        var secondUserId = await SeedUserAsync(context, enterpriseWeChatUserId: "legacy-id-2", displayName: "Second Member");
+        var service = new UserBindingService(context);
+
+        var act = async () => await service.BindAsync("wx-user-1", secondUserId, actorRole: UserRole.Administrator);
+
+        await act.Should().ThrowAsync<UserBindingException>()
+            .WithMessage("Enterprise WeChat user id is already bound to another account.");
     }
 
     [Fact]
@@ -153,5 +204,56 @@ public sealed class EnterpriseWeChatAuthTests : IClassFixture<TestAppFactory>
         response.Headers.Location.Should().NotBeNull();
         response.Headers.Location!.OriginalString.Should().StartWith("/Auth/WaitingForBinding");
         response.Headers.Location!.OriginalString.Should().Contain("enterpriseWeChatUserId=wx-user-1");
+    }
+
+    private static async Task<AtelierDbContext> CreateContextAsync()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<AtelierDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var context = new AtelierDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+        return context;
+    }
+
+    private static async Task<Guid> SeedUserAsync(AtelierDbContext context, string enterpriseWeChatUserId, string displayName = "Member")
+    {
+        var workspaceId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var createdAt = DateTimeOffset.UtcNow;
+
+        context.Workspaces.Add(new Workspace
+        {
+            Id = workspaceId,
+            Name = $"Workspace-{workspaceId:N}",
+            CreatedAt = createdAt,
+        });
+
+        context.Teams.Add(new Team
+        {
+            Id = teamId,
+            WorkspaceId = workspaceId,
+            Name = $"Team-{teamId:N}",
+            CreatedAt = createdAt,
+        });
+
+        context.Users.Add(new User
+        {
+            Id = userId,
+            WorkspaceId = workspaceId,
+            TeamId = teamId,
+            EnterpriseWeChatUserId = enterpriseWeChatUserId,
+            DisplayName = displayName,
+            Role = UserRole.Member,
+            CreatedAt = createdAt,
+        });
+
+        await context.SaveChangesAsync();
+        return userId;
     }
 }
