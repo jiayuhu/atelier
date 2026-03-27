@@ -47,4 +47,40 @@ public sealed class EnterpriseWeChatAuthenticationHandler : AuthenticationHandle
 
         Response.Redirect(challengeUrl);
     }
+
+    protected override async Task InitializeHandlerAsync()
+    {
+        await base.InitializeHandlerAsync();
+
+        if (Response.HasStarted)
+        {
+            return;
+        }
+
+        var enterpriseWeChatUserId = Request.Query["enterpriseWeChatUserId"].ToString();
+        if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
+        {
+            enterpriseWeChatUserId = Request.Headers["X-Enterprise-WeChat-UserId"].ToString();
+        }
+
+        if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
+        {
+            return;
+        }
+
+        var binding = await _authService.MapIdentityAsync(enterpriseWeChatUserId, Context.RequestAborted);
+        if (binding.State != AuthBindingState.BindingRequired)
+        {
+            return;
+        }
+
+        var currentPath = Request.Path.Value ?? string.Empty;
+        if (currentPath.StartsWith("/Auth/WaitingForBinding", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var destination = $"/Auth/WaitingForBinding?enterpriseWeChatUserId={Uri.EscapeDataString(enterpriseWeChatUserId)}";
+        Context.Response.Redirect(destination);
+    }
 }

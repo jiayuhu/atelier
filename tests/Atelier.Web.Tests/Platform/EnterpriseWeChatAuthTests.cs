@@ -138,4 +138,20 @@ public sealed class EnterpriseWeChatAuthTests : IClassFixture<TestAppFactory>
         html.Should().Contain("wx-user-1");
         html.Should().Contain("/Settings?handler=Bind");
     }
+
+    [Fact]
+    public async Task UnmappedEnterpriseWeChatUser_IsRedirectedToWaitingForBindingAfterAuthentication()
+    {
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+        });
+
+        var response = await client.GetAsync("/?enterpriseWeChatUserId=wx-user-1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.Headers.Location.Should().NotBeNull();
+        response.Headers.Location!.OriginalString.Should().StartWith("/Auth/WaitingForBinding");
+        response.Headers.Location!.OriginalString.Should().Contain("enterpriseWeChatUserId=wx-user-1");
+    }
 }
