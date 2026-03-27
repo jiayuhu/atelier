@@ -18,6 +18,8 @@ public sealed class AtelierDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
 
+    public DbSet<HolidayCalendarEntry> HolidayCalendarEntries => Set<HolidayCalendarEntry>();
+
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     public DbSet<MonthlyPlan> MonthlyPlans => Set<MonthlyPlan>();

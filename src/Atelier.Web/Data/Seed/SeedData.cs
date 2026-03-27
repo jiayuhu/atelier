@@ -12,7 +12,9 @@ public sealed record SeedBlueprint(
     IReadOnlyList<string> TeamNames,
     string BootstrapAdminEnterpriseWeChatUserId,
     string BootstrapAdminDisplayName,
-    IReadOnlyList<DateOnly> HolidayDates);
+    IReadOnlyList<SeedHoliday> Holidays);
+
+public sealed record SeedHoliday(DateOnly Date, string Name);
 
 public static class SeedDataPreview
 {
@@ -50,16 +52,16 @@ public static class SeedData
             BootstrapAdminDisplayName: string.IsNullOrWhiteSpace(adminDisplayName)
                 ? "Atelier Admin"
                 : adminDisplayName,
-            HolidayDates: new[]
+            Holidays: new[]
             {
-                new DateOnly(2026, 10, 1),
-                new DateOnly(2026, 10, 2),
+                new SeedHoliday(new DateOnly(2026, 10, 1), "National Day"),
+                new SeedHoliday(new DateOnly(2026, 10, 2), "National Day Holiday"),
             });
     }
 
     public static async Task InitializeAsync(AtelierDbContext context, IConfiguration? configuration = null, CancellationToken cancellationToken = default)
     {
-        if (await context.Workspaces.AnyAsync(cancellationToken) || await context.Users.AnyAsync(cancellationToken))
+        if (await context.Workspaces.AnyAsync(cancellationToken))
         {
             return;
         }
@@ -85,7 +87,6 @@ public static class SeedData
                 Id = deliveryTeamId,
                 WorkspaceId = workspaceId,
                 Name = blueprint.TeamNames[0],
-                TeamLeadUserId = adminUserId,
                 CreatedAt = now,
             },
             new Team
@@ -108,10 +109,25 @@ public static class SeedData
             CreatedAt = now,
         };
 
+        var holidayEntries = blueprint.Holidays
+            .Select(holiday => new HolidayCalendarEntry
+            {
+                Id = Guid.NewGuid(),
+                WorkspaceId = workspaceId,
+                Date = holiday.Date,
+                Name = holiday.Name,
+                CreatedAt = now,
+            })
+            .ToArray();
+
         context.Workspaces.Add(workspace);
         context.Teams.AddRange(teams);
         context.Users.Add(admin);
+        context.HolidayCalendarEntries.AddRange(holidayEntries);
 
+        await context.SaveChangesAsync(cancellationToken);
+
+        teams[0].TeamLeadUserId = adminUserId;
         await context.SaveChangesAsync(cancellationToken);
     }
 }
