@@ -1,0 +1,27 @@
+@page
+@model Atelier.Web.Pages.Settings.IndexModel
+
+<main>
+    <h1>Settings</h1>
+    <p>Administrators can bind a waiting Enterprise WeChat identity to an internal account.</p>
+
+    <form method="post" asp-page-handler="Bind">
+        <label asp-for="Input.EnterpriseWeChatUserId">Enterprise WeChat user</label>
+        <input asp-for="Input.EnterpriseWeChatUserId" />
+
+        <label asp-for="Input.UserId">Internal user</label>
+        <select asp-for="Input.UserId">
+            @foreach (var user in Model.Users)
+            {
+                <option value="@user.Id">@user.DisplayName</option>
+            }
+        </select>
+
+        <button type="submit">Bind user</button>
+    </form>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <p>@Model.StatusMessage</p>
+    }
+</main>
