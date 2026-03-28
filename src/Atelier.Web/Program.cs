@@ -12,6 +12,7 @@ builder.Services.AddDbContext<AtelierDbContext>(options =>
     options.UseSqlite(connectionString));
 
 builder.Services.AddScoped<EnterpriseWeChatAuthService>();
+builder.Services.AddScoped<AuthorizationService>();
 builder.Services.AddScoped<UserBindingService>();
 
 builder.Services
@@ -40,6 +41,29 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    var authorizationService = context.RequestServices.GetRequiredService<AuthorizationService>();
+    var requestPath = context.Request.Path;
+
+    if (context.User.Identity?.IsAuthenticated == true
+        && requestPath.StartsWithSegments("/Auth/WaitingForBinding", StringComparison.OrdinalIgnoreCase)
+        && authorizationService.CanAccessBusinessPages(context.User))
+    {
+        context.Response.Redirect("/");
+        return;
+    }
+
+    if (context.User.Identity?.IsAuthenticated == true
+        && authorizationService.RequiresBinding(context.User)
+        && !requestPath.StartsWithSegments("/Auth/WaitingForBinding", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.Redirect(authorizationService.BuildWaitingForBindingPath(context.User));
+        return;
+    }
+
+    await next();
+});
 app.UseAuthorization();
 
 app.MapRazorPages();

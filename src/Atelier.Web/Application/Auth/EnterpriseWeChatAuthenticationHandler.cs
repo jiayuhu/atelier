@@ -48,6 +48,12 @@ public sealed class EnterpriseWeChatAuthenticationHandler : AuthenticationHandle
         Response.Redirect(challengeUrl);
     }
 
+    protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
+    {
+        Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+    }
+
     protected override async Task InitializeHandlerAsync()
     {
         await base.InitializeHandlerAsync();
