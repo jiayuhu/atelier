@@ -25,6 +25,7 @@ public sealed class AuditLogTests
         entry.TargetType.Should().Be("weekly_deadline");
         entry.TargetId.Should().Be("2026-04-05");
         entry.Summary.Should().Be("Updated weekly deadline");
+        context.ChangeTracker.Entries<AuditLog>().Should().BeEmpty();
         (await context.AuditLogs.SingleAsync(item => item.Id == entry.Id)).Action.Should().Be("deadline_changed");
     }
 
@@ -49,6 +50,29 @@ public sealed class AuditLogTests
         auditLogs[0].Action.Should().Be("team_created");
         auditLogs[1].Id.Should().Be(secondEntry.Id);
         auditLogs[1].Action.Should().Be("team_lead_assigned");
+    }
+
+    [Theory]
+    [InlineData(null, "team", "delivery", "Created team")]
+    [InlineData("   ", "team", "delivery", "Created team")]
+    [InlineData("team_created", null, "delivery", "Created team")]
+    [InlineData("team_created", "   ", "delivery", "Created team")]
+    [InlineData("team_created", "team", null, "Created team")]
+    [InlineData("team_created", "team", "   ", "Created team")]
+    [InlineData("team_created", "team", "delivery", null)]
+    [InlineData("team_created", "team", "delivery", "   ")]
+    public async Task RecordAsync_RejectsMissingRequiredFields(string? action, string? targetType, string? targetId, string? summary)
+    {
+        await using var context = await CreateContextAsync();
+        var workspaceId = Guid.NewGuid();
+        var actorUserId = Guid.NewGuid();
+        await SeedWorkspaceAndUserAsync(context, workspaceId, actorUserId);
+        var service = new AuditLogService(context);
+
+        var act = async () => await service.RecordAsync(workspaceId, actorUserId, action!, targetType!, targetId!, summary!);
+
+        await act.Should().ThrowAsync<AuditLogValidationException>();
+        (await context.AuditLogs.CountAsync()).Should().Be(0);
     }
 
     private static async Task<AtelierDbContext> CreateContextAsync()
