@@ -1,0 +1,31 @@
+@page
+@model Atelier.Web.Pages.PlanReview.WeeklyReports.IndexModel
+
+<main>
+    <h1>Weekly Reports</h1>
+    <p>Draft, submit, and resubmit weekly status against the active monthly plan.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Week start</th>
+                <th>User</th>
+                <th>Status</th>
+                <th>Deadline</th>
+                <th>Late</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var report in Model.Reports)
+        {
+            <tr>
+                <td>@report.ReportingWeekStartDate</td>
+                <td>@report.UserName</td>
+                <td>@report.Status</td>
+                <td>@report.EffectiveDeadlineDate</td>
+                <td>@(report.IsLate ? "Yes" : "No")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</main>
