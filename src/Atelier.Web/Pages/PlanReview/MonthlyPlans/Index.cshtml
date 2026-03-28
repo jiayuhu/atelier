@@ -1,0 +1,31 @@
+@page
+@model Atelier.Web.Pages.PlanReview.MonthlyPlans.IndexModel
+
+<main>
+    <h1>Monthly Plans</h1>
+    <p>Review the current monthly plan lifecycle and read-only state.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Month</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Primary</th>
+                <th>Read-only</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var plan in Model.Plans)
+        {
+            <tr>
+                <td>@plan.PlanMonth</td>
+                <td>@plan.Title</td>
+                <td>@plan.Status</td>
+                <td>@(plan.IsPrimary ? "Yes" : "No")</td>
+                <td>@(plan.IsReadOnly ? "Yes" : "No")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</main>

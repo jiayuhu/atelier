@@ -24,6 +24,10 @@ public sealed class MonthlyPlan
 
     public DateTimeOffset UpdatedAt { get; set; }
 
+    public DateTimeOffset? ClosedAt { get; set; }
+
+    public bool IsReadOnly => Status is MonthlyPlanStatus.Closed or MonthlyPlanStatus.Archived;
+
     public Workspace? Workspace { get; set; }
 
     public User? CreatedByUser { get; set; }

@@ -1,6 +1,7 @@
 using Atelier.Web.Data;
 using Atelier.Web.Data.Seed;
 using Atelier.Web.Application.Auth;
+using Atelier.Web.Application.PlanReview;
 using Atelier.Web.Application.Platform;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,8 @@ builder.Services.AddDbContext<AtelierDbContext>(options =>
 builder.Services.AddScoped<EnterpriseWeChatAuthService>();
 builder.Services.AddScoped<AuthorizationService>();
 builder.Services.AddScoped<UserBindingService>();
+builder.Services.AddScoped<MonthlyPlanService>();
+builder.Services.AddHostedService<MonthCloseHostedService>();
 
 builder.Services
     .AddAuthentication(options =>

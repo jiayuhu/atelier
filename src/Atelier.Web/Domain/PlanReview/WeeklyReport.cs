@@ -30,6 +30,10 @@ public sealed class WeeklyReport
 
     public DateTimeOffset? SubmittedAt { get; set; }
 
+    public DateTimeOffset? ReadOnlyAt { get; set; }
+
+    public bool IsReadOnly => ReadOnlyAt.HasValue || MonthlyPlan?.IsReadOnly == true;
+
     public MonthlyPlan? MonthlyPlan { get; set; }
 
     public User? User { get; set; }
