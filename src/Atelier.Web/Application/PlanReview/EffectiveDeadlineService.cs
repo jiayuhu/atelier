@@ -1,4 +1,5 @@
 using Atelier.Web.Application.Platform;
+using Atelier.Web.Data;
 
 namespace Atelier.Web.Application.PlanReview;
 
@@ -13,11 +14,10 @@ public static class EffectiveDeadlineService
     {
         _ = reportingWeekStartDate;
 
-        var plannedDeadline = overrideDeadline ?? configuredDeadline;
-        var effectiveDeadline = deadlineDisabled
-            ? plannedDeadline
-            : ShiftToNextWorkingDay(plannedDeadline, holidays);
-        var attributedMonth = new DateOnly(effectiveDeadline.Year, effectiveDeadline.Month, 1);
+        var rawPlannedDeadline = overrideDeadline ?? configuredDeadline;
+        var plannedDeadline = ShiftForHolidayOnly(rawPlannedDeadline, holidays);
+        var effectiveDeadline = plannedDeadline;
+        var attributedMonth = new DateOnly(plannedDeadline.Year, plannedDeadline.Month, 1);
 
         return new EffectiveDeadlineResult(
             plannedDeadline,
@@ -27,40 +27,38 @@ public static class EffectiveDeadlineService
             deadlineDisabled);
     }
 
-    public static Task<IReadOnlyList<AuditLogEntry>> RecordDeadlineRuleChangeAsync(
+    public static Task<AuditLogEntry> RecordDeadlineRuleChangeAsync(
+        AtelierDbContext context,
         Guid workspaceId,
         Guid actorUserId,
         DateOnly reportingWeekStartDate,
         DateTimeOffset? overrideDeadline,
-        bool disabled)
+        bool disabled,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         var action = disabled ? "deadline_disabled" : "deadline_changed";
         var summary = disabled
             ? $"Disabled weekly reporting deadline for {reportingWeekStartDate:yyyy-MM-dd}."
             : $"Updated weekly reporting deadline for {reportingWeekStartDate:yyyy-MM-dd} to {(overrideDeadline ?? default):yyyy-MM-dd HH:mm zzz}.";
 
-        IReadOnlyList<AuditLogEntry> entries =
-        [
-            new AuditLogEntry(
-                Guid.NewGuid(),
-                workspaceId,
-                actorUserId,
-                action,
-                "weekly_reporting_rule",
-                reportingWeekStartDate.ToString("yyyy-MM-dd"),
-                summary,
-                DateTimeOffset.UtcNow),
-        ];
-
-        return Task.FromResult(entries);
+        return new AuditLogService(context).RecordAsync(
+            workspaceId,
+            actorUserId,
+            action,
+            "weekly_reporting_rule",
+            reportingWeekStartDate.ToString("yyyy-MM-dd"),
+            summary,
+            cancellationToken);
     }
 
-    private static DateTimeOffset ShiftToNextWorkingDay(DateTimeOffset deadline, IEnumerable<DateOnly> holidays)
+    private static DateTimeOffset ShiftForHolidayOnly(DateTimeOffset deadline, IEnumerable<DateOnly> holidays)
     {
         var holidaySet = holidays.ToHashSet();
         var shiftedDate = DateOnly.FromDateTime(deadline.DateTime);
 
-        while (shiftedDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || holidaySet.Contains(shiftedDate))
+        while (holidaySet.Contains(shiftedDate))
         {
             shiftedDate = shiftedDate.AddDays(1);
         }

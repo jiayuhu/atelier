@@ -1,7 +1,11 @@
 using Atelier.Web.Application.PlanReview;
+using Atelier.Web.Data;
 using Atelier.Web.Domain.Common;
 using Atelier.Web.Domain.PlanReview;
+using Atelier.Web.Domain.Platform;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Atelier.Web.Tests.PlanReview;
@@ -98,19 +102,19 @@ public sealed class WeeklyReportServiceTests
     {
         var plan = CreateActivePlan();
         var deadline = EffectiveDeadlineService.Resolve(
-            new DateOnly(2026, 3, 30),
-            new DateTimeOffset(2026, 4, 5, 18, 0, 0, TimeSpan.FromHours(8)),
+            new DateOnly(2026, 4, 27),
+            new DateTimeOffset(2026, 4, 30, 18, 0, 0, TimeSpan.FromHours(8)),
             overrideDeadline: null,
             deadlineDisabled: true,
-            holidays: [new DateOnly(2026, 4, 6)]);
+            holidays: [new DateOnly(2026, 4, 30), new DateOnly(2026, 5, 1)]);
 
         var result = WeeklyReportService.SubmitOrResubmit(
             existingReport: null,
-            submission: CreateSubmission(plan, 35m, new DateTimeOffset(2026, 4, 5, 17, 0, 0, TimeSpan.FromHours(8)), deadline),
+            submission: CreateSubmission(plan, 35m, new DateTimeOffset(2026, 5, 2, 17, 0, 0, TimeSpan.FromHours(8)), deadline, new DateOnly(2026, 4, 27)),
             plan);
 
-        result.AttributedMonth.Should().Be(new DateOnly(2026, 4, 1));
-        result.Report.EffectiveDeadlineDate.Should().Be(new DateOnly(2026, 4, 5));
+        result.AttributedMonth.Should().Be(new DateOnly(2026, 5, 1));
+        result.Report.EffectiveDeadlineDate.Should().Be(new DateOnly(2026, 5, 2));
     }
 
     [Fact]
@@ -146,16 +150,55 @@ public sealed class WeeklyReportServiceTests
     }
 
     [Fact]
-    public async Task RecordSubmissionAuditAsync_ProducesSubmitAndResubmitEntries()
+    public async Task SubmitOrResubmitAsync_PersistsSubmitAndResubmitAuditRows()
     {
-        var workspaceId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var actorUserId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        await using var context = await CreateContextAsync();
+        var seeded = await SeedWorkspaceGraphAsync(context);
+        context.ChangeTracker.Clear();
 
-        var submittedEntries = await WeeklyReportService.RecordSubmissionAuditAsync(workspaceId, actorUserId, existingReportId: null);
-        var resubmittedEntries = await WeeklyReportService.RecordSubmissionAuditAsync(workspaceId, actorUserId, existingReportId: Guid.NewGuid());
+        var first = await WeeklyReportService.SubmitOrResubmitAsync(
+            context,
+            seeded.Plan.Id,
+            CreateSubmission(seeded.Plan, 35m, new DateTimeOffset(2026, 4, 6, 9, 0, 0, TimeSpan.FromHours(8))));
 
-        submittedEntries.Should().ContainSingle(entry => entry.Action == "weekly_report_submitted");
-        resubmittedEntries.Should().ContainSingle(entry => entry.Action == "weekly_report_resubmitted");
+        context.ChangeTracker.Clear();
+
+        var second = await WeeklyReportService.SubmitOrResubmitAsync(
+            context,
+            seeded.Plan.Id,
+            CreateSubmission(seeded.Plan, 40m, new DateTimeOffset(2026, 4, 7, 9, 0, 0, TimeSpan.FromHours(8))));
+
+        first.Report.Id.Should().Be(second.Report.Id);
+
+        var auditActions = (await context.AuditLogs
+            .Select(log => new { log.Action, log.CreatedAt })
+            .ToListAsync())
+            .OrderBy(log => log.CreatedAt)
+            .Select(log => log.Action)
+            .ToList();
+
+        auditActions.Should().Equal("weekly_report_submitted", "weekly_report_resubmitted");
+        (await context.WeeklyReports.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RecordSubmissionAuditAsync_PersistsRowsThroughAuditLogService()
+    {
+        await using var context = await CreateContextAsync();
+        var seeded = await SeedWorkspaceGraphAsync(context);
+        context.ChangeTracker.Clear();
+
+        var submitted = await WeeklyReportService.RecordSubmissionAuditAsync(context, seeded.Plan.WorkspaceId, seeded.Plan.CreatedByUserId, null);
+        var resubmitted = await WeeklyReportService.RecordSubmissionAuditAsync(context, seeded.Plan.WorkspaceId, seeded.Plan.CreatedByUserId, Guid.NewGuid());
+
+        submitted.Action.Should().Be("weekly_report_submitted");
+        resubmitted.Action.Should().Be("weekly_report_resubmitted");
+
+        var auditActions = (await context.AuditLogs.Select(log => new { log.Action, log.CreatedAt }).ToListAsync())
+            .OrderBy(log => log.CreatedAt)
+            .Select(log => log.Action)
+            .ToList();
+        auditActions.Should().Equal("weekly_report_submitted", "weekly_report_resubmitted");
     }
 
     private static MonthlyPlan CreateActivePlan()
@@ -226,13 +269,14 @@ public sealed class WeeklyReportServiceTests
         MonthlyPlan plan,
         decimal currentValue,
         DateTimeOffset submittedAt,
-        EffectiveDeadlineResult? deadline = null)
+        EffectiveDeadlineResult? deadline = null,
+        DateOnly? reportingWeekStartDate = null)
     {
         var keyResultId = plan.Goals.Single().KeyResults.Single().Id;
 
         return new WeeklyReportSubmissionInput(
             plan.CreatedByUserId,
-            new DateOnly(2026, 3, 30),
+            reportingWeekStartDate ?? new DateOnly(2026, 3, 30),
             deadline ?? CreateDeadlineResult(),
             "Delivered blocker cleanup",
             "Finish validation",
@@ -242,4 +286,77 @@ public sealed class WeeklyReportServiceTests
             [new WeeklyReportBlockerInput("Need infra access", "Validation is blocked", false, keyResultId)],
             [new WeeklyReportUnlinkedWorkItemInput("Support launch checklist", "Coordinate release prep", Priority.Medium, WorkItemStatus.Active)]);
     }
+
+    private static async Task<AtelierDbContext> CreateContextAsync()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<AtelierDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var context = new AtelierDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+        return context;
+    }
+
+    private static async Task<SeededGraph> SeedWorkspaceGraphAsync(AtelierDbContext context)
+    {
+        var workspaceId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        var adminUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var createdAt = new DateTimeOffset(2026, 4, 1, 9, 0, 0, TimeSpan.Zero);
+        var plan = CreateActivePlan();
+
+        context.Workspaces.Add(new Workspace
+        {
+            Id = workspaceId,
+            Name = "Atelier",
+            CreatedAt = createdAt,
+        });
+
+        context.Teams.Add(new Team
+        {
+            Id = teamId,
+            WorkspaceId = workspaceId,
+            Name = "Delivery",
+            CreatedAt = createdAt,
+        });
+
+        context.Users.Add(new User
+        {
+            Id = adminUserId,
+            WorkspaceId = workspaceId,
+            TeamId = teamId,
+            EnterpriseWeChatUserId = "wx-admin",
+            DisplayName = "Admin",
+            Role = UserRole.Administrator,
+            CreatedAt = createdAt,
+        });
+
+        plan.WorkspaceId = workspaceId;
+        plan.CreatedByUserId = adminUserId;
+
+        foreach (var goal in plan.Goals)
+        {
+            goal.OwnerUserId = adminUserId;
+
+            foreach (var keyResult in goal.KeyResults)
+            {
+                keyResult.OwnerUserId = adminUserId;
+            }
+        }
+
+        context.MonthlyPlans.Add(plan);
+        await context.SaveChangesAsync();
+
+        var team = await context.Teams.SingleAsync(item => item.Id == teamId);
+        team.TeamLeadUserId = adminUserId;
+        await context.SaveChangesAsync();
+
+        return new SeededGraph(plan);
+    }
+
+    private sealed record SeededGraph(MonthlyPlan Plan);
 }

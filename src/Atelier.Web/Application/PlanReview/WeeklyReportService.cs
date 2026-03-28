@@ -1,6 +1,8 @@
 using Atelier.Web.Application.Platform;
+using Atelier.Web.Data;
 using Atelier.Web.Domain.Common;
 using Atelier.Web.Domain.PlanReview;
+using Microsoft.EntityFrameworkCore;
 
 namespace Atelier.Web.Application.PlanReview;
 
@@ -32,6 +34,133 @@ public static class WeeklyReportService
         EnsurePlanIsEditable(plan, existingReport);
 
         var report = existingReport ?? CreateReport(plan, submission.UserId, submission.ReportingWeekStartDate, submission.SubmittedAt);
+        ApplySubmissionToReport(report, submission, plan);
+
+        var attributedMonth = submission.Deadline.AttributedMonth;
+        return new WeeklyReportSubmissionResult(report, attributedMonth);
+    }
+
+    public static Task<AuditLogEntry> RecordSubmissionAuditAsync(
+        AtelierDbContext context,
+        Guid workspaceId,
+        Guid actorUserId,
+        Guid? existingReportId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var action = existingReportId.HasValue ? "weekly_report_resubmitted" : "weekly_report_submitted";
+        var targetId = existingReportId?.ToString() ?? "new";
+
+        return new AuditLogService(context).RecordAsync(
+            workspaceId,
+            actorUserId,
+            action,
+            "weekly_report",
+            targetId,
+            existingReportId.HasValue ? "Resubmitted weekly report." : "Submitted weekly report.",
+            cancellationToken);
+    }
+
+    public static async Task<WeeklyReportSubmissionResult> SubmitOrResubmitAsync(
+        AtelierDbContext context,
+        Guid monthlyPlanId,
+        WeeklyReportSubmissionInput submission,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(submission);
+
+        var plan = await context.MonthlyPlans
+            .Include(item => item.Goals)
+            .ThenInclude(goal => goal.KeyResults)
+            .SingleAsync(item => item.Id == monthlyPlanId, cancellationToken);
+
+        var existingReport = await context.WeeklyReports
+            .Include(report => report.KrUpdates)
+            .Include(report => report.Blockers)
+            .Include(report => report.UnlinkedWorkItems)
+            .SingleOrDefaultAsync(report =>
+            report.UserId == submission.UserId &&
+            report.ReportingWeekStartDate == submission.ReportingWeekStartDate &&
+            report.MonthlyPlanId == monthlyPlanId,
+            cancellationToken);
+
+        if (existingReport is null)
+        {
+            var report = CreateReport(plan, submission.UserId, submission.ReportingWeekStartDate, submission.SubmittedAt);
+            ApplySubmissionToReport(report, submission, plan);
+
+            context.WeeklyReports.Add(report);
+            context.KrUpdates.AddRange(report.KrUpdates);
+            context.Blockers.AddRange(report.Blockers);
+            context.UnlinkedWorkItems.AddRange(report.UnlinkedWorkItems);
+            await context.SaveChangesAsync(cancellationToken);
+
+            await RecordSubmissionAuditAsync(
+                context,
+                plan.WorkspaceId,
+                submission.UserId,
+                null,
+                cancellationToken);
+
+            return new WeeklyReportSubmissionResult(report, submission.Deadline.AttributedMonth);
+        }
+
+        context.Blockers.RemoveRange(existingReport.Blockers.ToList());
+        context.KrUpdates.RemoveRange(existingReport.KrUpdates.ToList());
+        context.UnlinkedWorkItems.RemoveRange(existingReport.UnlinkedWorkItems.ToList());
+        ApplySubmissionScalars(existingReport, submission, plan);
+
+        var artifacts = BuildSubmissionArtifacts(existingReport.Id, submission, plan);
+        context.KrUpdates.AddRange(artifacts.KrUpdates);
+        context.Blockers.AddRange(artifacts.Blockers);
+        context.UnlinkedWorkItems.AddRange(artifacts.UnlinkedWorkItems);
+        await context.SaveChangesAsync(cancellationToken);
+
+        existingReport.KrUpdates = artifacts.KrUpdates;
+        existingReport.Blockers = artifacts.Blockers;
+        existingReport.UnlinkedWorkItems = artifacts.UnlinkedWorkItems;
+
+        await RecordSubmissionAuditAsync(
+            context,
+            plan.WorkspaceId,
+            submission.UserId,
+            existingReport.Id,
+            cancellationToken);
+
+        return new WeeklyReportSubmissionResult(existingReport, submission.Deadline.AttributedMonth);
+    }
+
+    private static WeeklyReport CreateReport(MonthlyPlan plan, Guid userId, DateOnly reportingWeekStartDate, DateTimeOffset createdAt)
+    {
+        return new WeeklyReport
+        {
+            Id = Guid.NewGuid(),
+            MonthlyPlanId = plan.Id,
+            UserId = userId,
+            ReportingWeekStartDate = reportingWeekStartDate,
+            Status = WeeklyReportStatus.Draft,
+            WeeklyProgress = string.Empty,
+            NextWeekPlan = string.Empty,
+            AdditionalNotes = string.Empty,
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+        };
+    }
+
+    private static void ApplySubmissionToReport(WeeklyReport report, WeeklyReportSubmissionInput submission, MonthlyPlan plan)
+    {
+        ApplySubmissionScalars(report, submission, plan);
+
+        var artifacts = BuildSubmissionArtifacts(report.Id, submission, plan);
+        report.KrUpdates = artifacts.KrUpdates;
+        report.Blockers = artifacts.Blockers;
+        report.UnlinkedWorkItems = artifacts.UnlinkedWorkItems;
+    }
+
+    private static void ApplySubmissionScalars(WeeklyReport report, WeeklyReportSubmissionInput submission, MonthlyPlan plan)
+    {
         report.MonthlyPlanId = plan.Id;
         report.UserId = submission.UserId;
         report.ReportingWeekStartDate = submission.ReportingWeekStartDate;
@@ -43,7 +172,10 @@ public static class WeeklyReportService
         report.AdditionalNotes = submission.AdditionalNotes?.Trim() ?? string.Empty;
         report.SubmittedAt = submission.SubmittedAt;
         report.UpdatedAt = submission.SubmittedAt;
+    }
 
+    private static WeeklyReportArtifacts BuildSubmissionArtifacts(Guid reportId, WeeklyReportSubmissionInput submission, MonthlyPlan plan)
+    {
         var keyResults = plan.Goals
             .SelectMany(goal => goal.KeyResults)
             .ToDictionary(keyResult => keyResult.Id);
@@ -62,7 +194,7 @@ public static class WeeklyReportService
             krUpdates.Add(new KrUpdate
             {
                 Id = Guid.NewGuid(),
-                WeeklyReportId = report.Id,
+                WeeklyReportId = reportId,
                 KeyResultId = keyResult.Id,
                 CurrentValue = input.CurrentValue,
                 ExecutionNotes = RequireValue(input.ExecutionNotes, nameof(input.ExecutionNotes)),
@@ -85,7 +217,7 @@ public static class WeeklyReportService
             blockers.Add(new Blocker
             {
                 Id = Guid.NewGuid(),
-                WeeklyReportId = report.Id,
+                WeeklyReportId = reportId,
                 KrUpdateId = linkedUpdateId,
                 Summary = RequireValue(input.Summary, nameof(input.Summary)),
                 Impact = RequireValue(input.Impact, nameof(input.Impact)),
@@ -94,13 +226,11 @@ public static class WeeklyReportService
             });
         }
 
-        report.KrUpdates = krUpdates;
-        report.Blockers = blockers;
-        report.UnlinkedWorkItems = submission.UnlinkedWorkItems
+        var unlinkedWorkItems = submission.UnlinkedWorkItems
             .Select(item => new UnlinkedWorkItem
             {
                 Id = Guid.NewGuid(),
-                WeeklyReportId = report.Id,
+                WeeklyReportId = reportId,
                 Title = RequireValue(item.Title, nameof(item.Title)),
                 Notes = item.Notes?.Trim() ?? string.Empty,
                 Priority = item.Priority,
@@ -109,46 +239,7 @@ public static class WeeklyReportService
             })
             .ToList();
 
-        var attributedMonth = submission.Deadline.AttributedMonth;
-        return new WeeklyReportSubmissionResult(report, attributedMonth);
-    }
-
-    public static Task<IReadOnlyList<AuditLogEntry>> RecordSubmissionAuditAsync(Guid workspaceId, Guid actorUserId, Guid? existingReportId)
-    {
-        var action = existingReportId.HasValue ? "weekly_report_resubmitted" : "weekly_report_submitted";
-        var targetId = existingReportId?.ToString() ?? "new";
-
-        IReadOnlyList<AuditLogEntry> entries =
-        [
-            new AuditLogEntry(
-                Guid.NewGuid(),
-                workspaceId,
-                actorUserId,
-                action,
-                "weekly_report",
-                targetId,
-                existingReportId.HasValue ? "Resubmitted weekly report." : "Submitted weekly report.",
-                DateTimeOffset.UtcNow),
-        ];
-
-        return Task.FromResult(entries);
-    }
-
-    private static WeeklyReport CreateReport(MonthlyPlan plan, Guid userId, DateOnly reportingWeekStartDate, DateTimeOffset createdAt)
-    {
-        return new WeeklyReport
-        {
-            Id = Guid.NewGuid(),
-            MonthlyPlanId = plan.Id,
-            UserId = userId,
-            ReportingWeekStartDate = reportingWeekStartDate,
-            Status = WeeklyReportStatus.Draft,
-            WeeklyProgress = string.Empty,
-            NextWeekPlan = string.Empty,
-            AdditionalNotes = string.Empty,
-            CreatedAt = createdAt,
-            UpdatedAt = createdAt,
-        };
+        return new WeeklyReportArtifacts(krUpdates, blockers, unlinkedWorkItems);
     }
 
     private static void EnsurePlanIsEditable(MonthlyPlan plan, WeeklyReport? existingReport)
@@ -212,3 +303,8 @@ public sealed record WeeklyReportUnlinkedWorkItemInput(
     WorkItemStatus Status);
 
 public sealed record WeeklyReportSubmissionResult(WeeklyReport Report, DateOnly AttributedMonth);
+
+internal sealed record WeeklyReportArtifacts(
+    List<KrUpdate> KrUpdates,
+    List<Blocker> Blockers,
+    List<UnlinkedWorkItem> UnlinkedWorkItems);
