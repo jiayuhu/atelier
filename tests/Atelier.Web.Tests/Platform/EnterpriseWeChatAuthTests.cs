@@ -152,6 +152,23 @@ public sealed class EnterpriseWeChatAuthTests : IClassFixture<TestAppFactory>
     }
 
     [Fact]
+    public async Task AuthenticatedAdministrator_CanOpenSettingsWithPendingBindingQueryString()
+    {
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+        });
+        client.DefaultRequestHeaders.Add("X-Enterprise-WeChat-UserId", "atelier-admin");
+
+        var response = await client.GetAsync("/Settings?enterpriseWeChatUserId=wx-pending");
+        var html = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        html.Should().Contain("<h1>Settings</h1>");
+        html.Should().Contain("?enterpriseWeChatUserId=...");
+    }
+
+    [Fact]
     public async Task BindAsync_RejectsEmptyEnterpriseWeChatUserId()
     {
         await using var context = await CreateContextAsync();

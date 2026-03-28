@@ -22,10 +22,10 @@ public sealed class EnterpriseWeChatAuthenticationHandler : AuthenticationHandle
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var enterpriseWeChatUserId = Request.Query["enterpriseWeChatUserId"].ToString();
+        var enterpriseWeChatUserId = Request.Headers["X-Enterprise-WeChat-UserId"].ToString();
         if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
         {
-            enterpriseWeChatUserId = Request.Headers["X-Enterprise-WeChat-UserId"].ToString();
+            enterpriseWeChatUserId = Request.Query["enterpriseWeChatUserId"].ToString();
         }
 
         if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
@@ -63,10 +63,10 @@ public sealed class EnterpriseWeChatAuthenticationHandler : AuthenticationHandle
             return;
         }
 
-        var enterpriseWeChatUserId = Request.Query["enterpriseWeChatUserId"].ToString();
+        var enterpriseWeChatUserId = Request.Headers["X-Enterprise-WeChat-UserId"].ToString();
         if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
         {
-            enterpriseWeChatUserId = Request.Headers["X-Enterprise-WeChat-UserId"].ToString();
+            enterpriseWeChatUserId = Request.Query["enterpriseWeChatUserId"].ToString();
         }
 
         if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
