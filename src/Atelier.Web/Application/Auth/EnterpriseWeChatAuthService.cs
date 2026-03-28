@@ -55,6 +55,7 @@ public sealed class EnterpriseWeChatAuthService
         claims.Add(new Claim(ClaimTypes.NameIdentifier, knownUser.Id.ToString()));
         claims.Add(new Claim(ClaimTypes.Name, knownUser.DisplayName));
         claims.Add(new Claim(ClaimTypes.Role, knownUser.Role.ToString()));
+        claims.Add(new Claim("atelier:team_id", knownUser.TeamId.ToString()));
 
         var identity = new ClaimsIdentity(claims, authenticationType: "EnterpriseWeChat", nameType: ClaimTypes.Name, roleType: ClaimTypes.Role);
         return new AuthBindingResult(AuthBindingState.Active, knownUser.Id, new ClaimsPrincipal(identity));
