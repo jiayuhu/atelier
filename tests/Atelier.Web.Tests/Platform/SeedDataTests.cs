@@ -221,4 +221,97 @@ WHERE Id = '{deliveryTeamId}';
         adminCount.Should().Be(1);
         holidayCount.Should().Be(2);
     }
+
+    [Fact]
+    public async Task EnsureSchemaAsync_AddsTask7PlanReviewColumnsToLegacySqliteSchema()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = @"
+CREATE TABLE Workspaces (
+    Id TEXT NOT NULL CONSTRAINT PK_Workspaces PRIMARY KEY,
+    Name TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL
+);
+
+CREATE TABLE Teams (
+    Id TEXT NOT NULL CONSTRAINT PK_Teams PRIMARY KEY,
+    WorkspaceId TEXT NOT NULL,
+    Name TEXT NOT NULL,
+    TeamLeadUserId TEXT NULL,
+    CreatedAt TEXT NOT NULL
+);
+
+CREATE TABLE Users (
+    Id TEXT NOT NULL CONSTRAINT PK_Users PRIMARY KEY,
+    WorkspaceId TEXT NOT NULL,
+    TeamId TEXT NOT NULL,
+    EnterpriseWeChatUserId TEXT NOT NULL,
+    DisplayName TEXT NOT NULL,
+    Role INTEGER NOT NULL,
+    CreatedAt TEXT NOT NULL
+);
+
+CREATE TABLE MonthlyPlans (
+    Id TEXT NOT NULL CONSTRAINT PK_MonthlyPlans PRIMARY KEY,
+    WorkspaceId TEXT NOT NULL,
+    CreatedByUserId TEXT NOT NULL,
+    PlanMonth TEXT NOT NULL,
+    Title TEXT NOT NULL,
+    Description TEXT NOT NULL,
+    Status INTEGER NOT NULL,
+    IsPrimary INTEGER NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    UpdatedAt TEXT NOT NULL
+);
+
+CREATE TABLE WeeklyReports (
+    Id TEXT NOT NULL CONSTRAINT PK_WeeklyReports PRIMARY KEY,
+    MonthlyPlanId TEXT NOT NULL,
+    UserId TEXT NOT NULL,
+    ReportingWeekStartDate TEXT NOT NULL,
+    EffectiveDeadlineDate TEXT NOT NULL,
+    Status INTEGER NOT NULL,
+    IsLate INTEGER NOT NULL,
+    WeeklyProgress TEXT NOT NULL,
+    NextWeekPlan TEXT NOT NULL,
+    AdditionalNotes TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    UpdatedAt TEXT NOT NULL,
+    SubmittedAt TEXT NULL
+);";
+
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var options = new DbContextOptionsBuilder<AtelierDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var context = new AtelierDbContext(options);
+
+        await SeedData.EnsureSchemaAsync(context);
+
+        (await GetColumnNamesAsync(connection, "MonthlyPlans")).Should().Contain("ClosedAt");
+        (await GetColumnNamesAsync(connection, "WeeklyReports")).Should().Contain("ReadOnlyAt");
+    }
+
+    private static async Task<IReadOnlyList<string>> GetColumnNamesAsync(SqliteConnection connection, string tableName)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info(\"{tableName}\");";
+
+        var columnNames = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            columnNames.Add(reader.GetString(1));
+        }
+
+        return columnNames;
+    }
 }

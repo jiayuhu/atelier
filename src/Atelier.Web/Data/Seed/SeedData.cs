@@ -130,24 +130,43 @@ public static class SeedData
     {
         await context.Database.EnsureCreatedAsync(cancellationToken);
 
-        if (await HolidayCalendarTableExistsAsync(context, cancellationToken))
+        var openedConnection = context.Database.GetDbConnection().State != System.Data.ConnectionState.Open;
+        if (openedConnection)
         {
-            return;
+            await context.Database.OpenConnectionAsync(cancellationToken);
         }
 
-        await context.Database.ExecuteSqlRawAsync(
-            $@"CREATE TABLE ""{HolidayCalendarEntriesTableName}"" (
+        try
+        {
+            if (!await TableExistsAsync(context, HolidayCalendarEntriesTableName, cancellationToken))
+            {
+                var createHolidayTableSql = $@"CREATE TABLE ""{HolidayCalendarEntriesTableName}"" (
     ""Id"" TEXT NOT NULL CONSTRAINT ""PK_{HolidayCalendarEntriesTableName}"" PRIMARY KEY,
     ""WorkspaceId"" TEXT NOT NULL,
     ""Date"" TEXT NOT NULL,
     ""Name"" TEXT NOT NULL,
     ""CreatedAt"" TEXT NOT NULL,
     CONSTRAINT ""FK_{HolidayCalendarEntriesTableName}_Workspaces_WorkspaceId"" FOREIGN KEY (""WorkspaceId"") REFERENCES ""Workspaces"" (""Id"") ON DELETE RESTRICT
-);", cancellationToken);
+);";
 
-        await context.Database.ExecuteSqlRawAsync(
-            $"CREATE UNIQUE INDEX \"IX_{HolidayCalendarEntriesTableName}_WorkspaceId_Date\" ON \"{HolidayCalendarEntriesTableName}\" (\"WorkspaceId\", \"Date\");",
-            cancellationToken);
+                await context.Database.ExecuteSqlRawAsync(createHolidayTableSql, cancellationToken);
+
+                var createHolidayIndexSql =
+                    $"CREATE UNIQUE INDEX IF NOT EXISTS \"IX_{HolidayCalendarEntriesTableName}_WorkspaceId_Date\" ON \"{HolidayCalendarEntriesTableName}\" (\"WorkspaceId\", \"Date\");";
+
+                await context.Database.ExecuteSqlRawAsync(createHolidayIndexSql, cancellationToken);
+            }
+
+            await EnsureColumnExistsAsync(context, "MonthlyPlans", "ClosedAt", "TEXT NULL", cancellationToken);
+            await EnsureColumnExistsAsync(context, "WeeklyReports", "ReadOnlyAt", "TEXT NULL", cancellationToken);
+        }
+        finally
+        {
+            if (openedConnection)
+            {
+                await context.Database.CloseConnectionAsync();
+            }
+        }
     }
 
     private static async Task BackfillHolidayEntriesAsync(
@@ -185,25 +204,57 @@ public static class SeedData
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task<bool> HolidayCalendarTableExistsAsync(AtelierDbContext context, CancellationToken cancellationToken)
+    private static async Task EnsureColumnExistsAsync(
+        AtelierDbContext context,
+        string tableName,
+        string columnName,
+        string columnDefinition,
+        CancellationToken cancellationToken)
     {
-        await using var connection = context.Database.GetDbConnection();
-
-        if (connection.State != System.Data.ConnectionState.Open)
+        if (!await TableExistsAsync(context, tableName, cancellationToken)
+            || await ColumnExistsAsync(context, tableName, columnName, cancellationToken))
         {
-            await connection.OpenAsync(cancellationToken);
+            return;
         }
+
+        var addColumnSql = $"ALTER TABLE \"{tableName}\" ADD COLUMN \"{columnName}\" {columnDefinition};";
+        await context.Database.ExecuteSqlRawAsync(addColumnSql, cancellationToken);
+    }
+
+    private static async Task<bool> TableExistsAsync(AtelierDbContext context, string tableName, CancellationToken cancellationToken)
+    {
+        var connection = context.Database.GetDbConnection();
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $name LIMIT 1;";
 
         var parameter = command.CreateParameter();
         parameter.ParameterName = "$name";
-        parameter.Value = HolidayCalendarEntriesTableName;
+        parameter.Value = tableName;
         command.Parameters.Add(parameter);
 
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return result is not null;
+    }
+
+    private static async Task<bool> ColumnExistsAsync(AtelierDbContext context, string tableName, string columnName, CancellationToken cancellationToken)
+    {
+        var connection = context.Database.GetDbConnection();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info(\"{tableName}\");";
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 }
