@@ -52,6 +52,17 @@ public sealed class MonthlyPlanServiceTests
     }
 
     [Fact]
+    public void Activate_RejectsNonDraftPlan()
+    {
+        var plan = CreateDraftPlan();
+        MonthlyPlanService.Activate(plan);
+
+        var act = () => MonthlyPlanService.Activate(plan);
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task AdjustActivePlan_AllowsOnlyDescriptionOwnerAndDueDateAndWritesAudit()
     {
         await using var context = await CreateContextAsync();
@@ -108,14 +119,77 @@ public sealed class MonthlyPlanServiceTests
     }
 
     [Fact]
-    public void Archive_MakesPlanReadOnly()
+    public void Close_RejectsNonActivePlan()
     {
         var plan = CreateDraftPlan();
+        var effectiveCloseDate = new DateTimeOffset(2026, 4, 30, 18, 0, 0, TimeSpan.FromHours(8));
+
+        var act = () => MonthlyPlanService.Close(plan, effectiveCloseDate);
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Archive_MakesPlanReadOnly()
+    {
+        var plan = CreateActivePlanWithReport();
+        MonthlyPlanService.Close(plan, new DateTimeOffset(2026, 4, 30, 18, 0, 0, TimeSpan.FromHours(8)));
 
         MonthlyPlanService.Archive(plan);
 
         plan.Status.Should().Be(MonthlyPlanStatus.Archived);
         plan.IsReadOnly.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Archive_RejectsNonClosedPlan()
+    {
+        var plan = CreateDraftPlan();
+
+        var act = () => MonthlyPlanService.Archive(plan);
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task AdjustActivePlan_DoesNotPersistChangesWhenAuditWriteFails()
+    {
+        await using var context = await CreateContextAsync();
+        var seeded = await SeedWorkspaceGraphAsync(context);
+        var service = new MonthlyPlanService(context);
+
+        var act = async () => await service.AdjustActivePlanAsync(
+            seeded.Plan.Id,
+            Guid.NewGuid(),
+            "Updated but should roll back",
+            seeded.SecondUserId,
+            new DateOnly(2026, 4, 21));
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+
+        context.ChangeTracker.Clear();
+
+        var reloadedPlan = await context.MonthlyPlans
+            .Include(plan => plan.Goals)
+            .ThenInclude(goal => goal.KeyResults)
+            .SingleAsync(plan => plan.Id == seeded.Plan.Id);
+
+        reloadedPlan.Description.Should().Be("Original description");
+        reloadedPlan.Goals.Single().OwnerUserId.Should().Be(seeded.AdminUserId);
+        reloadedPlan.Goals.Single().KeyResults.Single().DueDate.Should().Be(new DateOnly(2026, 4, 18));
+        (await context.AuditLogs.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public void UpdateWeeklyReport_RejectsMutationsWhenParentMonthlyPlanIsClosed()
+    {
+        var plan = CreateActivePlanWithReport();
+        var report = plan.WeeklyReports.Single();
+        MonthlyPlanService.Close(plan, new DateTimeOffset(2026, 4, 30, 18, 0, 0, TimeSpan.FromHours(8)));
+
+        var act = () => MonthlyPlanService.UpdateWeeklyReport(report, "Changed after close", "Still trying", string.Empty);
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]

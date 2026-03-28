@@ -49,6 +49,11 @@ public sealed class MonthlyPlanService
     {
         ArgumentNullException.ThrowIfNull(plan);
 
+        if (plan.Status != MonthlyPlanStatus.Draft)
+        {
+            throw new InvalidOperationException("Only draft monthly plans can be activated.");
+        }
+
         plan.Status = MonthlyPlanStatus.Active;
         plan.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -96,6 +101,7 @@ public sealed class MonthlyPlanService
             : newDescription.Trim();
 
         var updatedAt = DateTimeOffset.UtcNow;
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
 
         plan.Description = normalizedDescription;
         plan.UpdatedAt = updatedAt;
@@ -113,8 +119,6 @@ public sealed class MonthlyPlanService
             }
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
-
         var auditEntry = await new AuditLogService(_context).RecordAsync(
             plan.WorkspaceId,
             actorUserId,
@@ -123,6 +127,8 @@ public sealed class MonthlyPlanService
             plan.Id.ToString(),
             $"Adjusted active monthly plan {plan.Title}.",
             cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
 
         var firstGoal = plan.Goals.FirstOrDefault();
         var firstKeyResult = firstGoal?.KeyResults.FirstOrDefault();
@@ -139,6 +145,11 @@ public sealed class MonthlyPlanService
     {
         ArgumentNullException.ThrowIfNull(plan);
 
+        if (plan.Status != MonthlyPlanStatus.Active)
+        {
+            throw new InvalidOperationException("Only active monthly plans can be closed.");
+        }
+
         plan.Status = MonthlyPlanStatus.Closed;
         plan.ClosedAt = effectiveCloseDate;
         plan.UpdatedAt = effectiveCloseDate;
@@ -154,8 +165,42 @@ public sealed class MonthlyPlanService
     {
         ArgumentNullException.ThrowIfNull(plan);
 
+        if (plan.Status != MonthlyPlanStatus.Closed)
+        {
+            throw new InvalidOperationException("Only closed monthly plans can be archived.");
+        }
+
         plan.Status = MonthlyPlanStatus.Archived;
         plan.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public static void UpdateWeeklyReport(
+        WeeklyReport report,
+        string weeklyProgress,
+        string nextWeekPlan,
+        string additionalNotes)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        if (report.IsReadOnly)
+        {
+            throw new InvalidOperationException("Weekly reports cannot be edited after the monthly plan is closed.");
+        }
+
+        report.WeeklyProgress = RequireValue(weeklyProgress, nameof(weeklyProgress));
+        report.NextWeekPlan = RequireValue(nextWeekPlan, nameof(nextWeekPlan));
+        report.AdditionalNotes = additionalNotes?.Trim() ?? string.Empty;
+        report.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static string RequireValue(string? value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException($"{parameterName} is required.", parameterName);
+        }
+
+        return value.Trim();
     }
 }
 
