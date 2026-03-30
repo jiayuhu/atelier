@@ -39,8 +39,8 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AtelierDbContext>();
-    SeedData.EnsureSchemaAsync(dbContext).GetAwaiter().GetResult();
-    SeedData.InitializeAsync(dbContext, app.Configuration).GetAwaiter().GetResult();
+    var handledByInitializer = StartupDatabaseInitializer.InitializeAsync(dbContext, app.Configuration).GetAwaiter().GetResult();
+    SeedData.InitializeAsync(dbContext, app.Configuration, backfillHolidays: !handledByInitializer).GetAwaiter().GetResult();
 }
 
 app.UseAuthentication();

@@ -24,6 +24,7 @@ public sealed class TestAppFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        builder.UseSetting("ATELIER_SQLITE_CONNECTION_STRING", $"Data Source={_databasePath}");
         builder.ConfigureAppConfiguration((_, configBuilder) =>
         {
             configBuilder.AddInMemoryCollection(new Dictionary<string, string?>

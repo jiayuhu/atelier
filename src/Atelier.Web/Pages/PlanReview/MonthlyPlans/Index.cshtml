@@ -5,6 +5,52 @@
     <h1>Monthly Plans</h1>
     <p>Review the current monthly plan lifecycle and read-only state.</p>
 
+    <p>
+        <a href="@Model.OverviewPath">Back to Overview</a>
+    </p>
+
+    <nav>
+        <a href="/PlanReview/MonthlyPlans">Monthly Plans</a>
+        <a href="/PlanReview/WeeklyReports">Weekly Reports</a>
+        <a href="/PlanReview/MonthlyReviews">Monthly Reviews</a>
+        <a href="/PlanReview/Revisions">Revisions</a>
+    </nav>
+
+    <section>
+        <h2>Create Plan</h2>
+        <form method="post" asp-page-handler="Create">
+            <label for="create-month">Month</label>
+            <input id="create-month" name="CreateMonth" type="month" value="@Model.CreateMonth" />
+
+            <label asp-for="CreateGoalTitle">Initial Goal Title</label>
+            <input asp-for="CreateGoalTitle" />
+
+            <label asp-for="CreateKeyResultTitle">Initial Key Result Title</label>
+            <input asp-for="CreateKeyResultTitle" />
+
+            <button type="submit">Create Plan</button>
+        </form>
+    </section>
+
+    <section>
+        <h2>Adjust Active Plan</h2>
+        <form method="post" asp-page-handler="Adjust">
+            <label asp-for="Adjustment.MonthLabel">Adjustment Cycle</label>
+            <input asp-for="Adjustment.MonthLabel" />
+            <button type="submit">Adjust Plan</button>
+        </form>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <p>@Model.StatusMessage</p>
+    }
+
+    @if (Model.Plans.Any(plan => plan.Status == "Active"))
+    {
+        <p>Status: Active</p>
+    }
+
     <table>
         <thead>
             <tr>
@@ -19,11 +65,24 @@
         @foreach (var plan in Model.Plans)
         {
             <tr>
-                <td>@plan.PlanMonth</td>
+                <td>@plan.PlanMonthLabel</td>
                 <td>@plan.Title</td>
                 <td>@plan.Status</td>
                 <td>@(plan.IsPrimary ? "Yes" : "No")</td>
                 <td>@(plan.IsReadOnly ? "Yes" : "No")</td>
+                <td>
+                    @if (plan.Status == "Draft")
+                    {
+                        <form method="post" asp-page-handler="Activate">
+                            <input type="hidden" name="id" value="@plan.Id" />
+                            <button type="submit">Activate Plan</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <span>@plan.Status</span>
+                    }
+                </td>
             </tr>
         }
         </tbody>

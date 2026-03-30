@@ -1,0 +1,23 @@
+@model IReadOnlyList<Atelier.Web.Application.PlanReview.NotificationEvent>
+
+@if (Model.Count == 0)
+{
+    <p>No notification preview events.</p>
+}
+else
+{
+    <ul>
+    @foreach (var notification in Model)
+    {
+        <li>
+            <strong>@notification.Type</strong>
+            for <code>@notification.RecipientUserId</code>
+            at <time>@notification.ScheduledFor</time>
+            @if (notification.IsOneTime)
+            {
+                <span>(one-time)</span>
+            }
+        </li>
+    }
+    </ul>
+}

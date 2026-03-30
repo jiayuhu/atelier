@@ -1,0 +1,31 @@
+@page
+@model Atelier.Web.Pages.PlanReview.Analysis.IndexModel
+
+<main>
+    <h1>Plan Review Analysis</h1>
+    <p>Deterministic execution analysis for key result risk, blockers, and portfolio focus.</p>
+
+    <p>
+        <a href="@Model.OverviewPath">Back to Overview</a>
+    </p>
+
+    <section>
+        <h2>Views</h2>
+        <ul>
+        @foreach (var view in Model.Views)
+        {
+            <li><strong>@view.Label</strong> - @view.Description</li>
+        }
+        </ul>
+    </section>
+
+    <section>
+        <h2>Execution State Classifications</h2>
+        <ul>
+        @foreach (var state in Model.ExecutionStates)
+        {
+            <li><strong>@state.Key</strong> - @state.Description</li>
+        }
+        </ul>
+    </section>
+</main>

@@ -5,6 +5,25 @@ namespace Atelier.Web.Application.PlanReview;
 
 public static class EffectiveDeadlineService
 {
+    private static readonly TimeSpan ShanghaiOffset = TimeSpan.FromHours(8);
+
+    public static EffectiveDeadlineResult ResolveDefault(
+        DateOnly reportingWeekStartDate,
+        DateTimeOffset? overrideDeadline,
+        bool deadlineDisabled,
+        IEnumerable<DateOnly> holidays)
+    {
+        var defaultDate = HolidayCalendarService.ShiftToNextWorkingDay(reportingWeekStartDate.AddDays(6), holidays);
+        var configuredDeadline = new DateTimeOffset(defaultDate.ToDateTime(new TimeOnly(18, 0)), ShanghaiOffset);
+
+        return Resolve(
+            reportingWeekStartDate,
+            configuredDeadline,
+            overrideDeadline,
+            deadlineDisabled,
+            holidays);
+    }
+
     public static EffectiveDeadlineResult Resolve(
         DateOnly reportingWeekStartDate,
         DateTimeOffset configuredDeadline,

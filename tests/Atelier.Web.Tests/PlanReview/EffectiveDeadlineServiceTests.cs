@@ -41,6 +41,22 @@ public sealed class EffectiveDeadlineServiceTests
     }
 
     [Fact]
+    public void ResolveDefault_UsesSundayEveningShanghaiAndShiftsForHolidays()
+    {
+        var result = EffectiveDeadlineService.ResolveDefault(
+            reportingWeekStartDate: new DateOnly(2026, 4, 7),
+            overrideDeadline: null,
+            deadlineDisabled: false,
+            holidays: [new DateOnly(2026, 4, 13)]);
+
+        result.PlannedDeadline.Should().Be(new DateTimeOffset(2026, 4, 14, 18, 0, 0, TimeSpan.FromHours(8)));
+        result.EffectiveDeadline.Should().Be(new DateTimeOffset(2026, 4, 14, 18, 0, 0, TimeSpan.FromHours(8)));
+        result.AttributedMonth.Should().Be(new DateOnly(2026, 4, 1));
+        result.IsOverridden.Should().BeFalse();
+        result.IsDisabled.Should().BeFalse();
+    }
+
+    [Fact]
     public void Resolve_UsesHolidayAdjustedPlannedDeadlineForDisabledAttribution()
     {
         var result = EffectiveDeadlineService.Resolve(

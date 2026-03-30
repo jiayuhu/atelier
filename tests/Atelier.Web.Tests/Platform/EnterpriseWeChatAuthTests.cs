@@ -1,11 +1,15 @@
 using System.Net;
+using System.Security.Claims;
 using Atelier.Web.Application.Auth;
 using Atelier.Web.Application.Platform;
+using Atelier.Web.Application.PlanReview;
 using Atelier.Web.Data;
 using Atelier.Web.Domain.Platform;
 using Atelier.Web.Pages.Settings;
 using Atelier.Web.Tests.Fixtures;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -169,6 +173,143 @@ public sealed class EnterpriseWeChatAuthTests : IClassFixture<TestAppFactory>
     }
 
     [Fact]
+    public async Task AuthenticatedAdministrator_CanOpenSettingsWithEnterpriseWeChatCookie()
+    {
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = false,
+        });
+
+        client.DefaultRequestHeaders.Add("Cookie", "atelier_enterprise_wechat_user_id=atelier-admin");
+
+        var response = await client.GetAsync("/Settings");
+        var html = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        html.Should().Contain("<h1>Settings</h1>");
+    }
+
+    [Fact]
+    public async Task SettingsPage_ApplyWeeklyDeadlineChange_PersistsAuditEntry()
+    {
+        await using var context = await CreateContextAsync();
+        var actorUserId = await SeedAdministratorAsync(context, "atelier-admin");
+        context.HolidayCalendarEntries.Add(new HolidayCalendarEntry
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = await GetWorkspaceIdAsync(context, actorUserId),
+            Date = new DateOnly(2026, 4, 6),
+            Name = "Observed holiday",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await context.SaveChangesAsync();
+
+        var model = new IndexModel(context, new UserBindingService(context))
+        {
+            WeeklyDeadlineInput = new IndexModel.WeeklyDeadlinePreviewInput
+            {
+                ReportingWeekStartDate = new DateOnly(2026, 3, 30),
+                ConfiguredDeadline = new DateTimeOffset(2026, 4, 5, 18, 0, 0, TimeSpan.FromHours(8)),
+                OverrideDeadline = new DateTimeOffset(2026, 4, 6, 18, 0, 0, TimeSpan.FromHours(8)),
+                DeadlineDisabled = false,
+            },
+        };
+
+        model.PageContext = CreatePageContext(actorUserId);
+
+        var result = await model.OnPostApplyWeeklyDeadlineAsync(CancellationToken.None);
+
+        result.Should().BeOfType<PageResult>();
+        model.StatusMessage.Should().Be("Weekly deadline change recorded.");
+        model.WeeklyDeadlinePreview.Should().NotBeNull();
+        model.WeeklyDeadlinePreview!.EffectiveDeadline.Should().Be(new DateTimeOffset(2026, 4, 7, 18, 0, 0, TimeSpan.FromHours(8)));
+
+        var auditRow = await context.AuditLogs.SingleAsync();
+        auditRow.ActorUserId.Should().Be(actorUserId);
+        auditRow.Action.Should().Be("deadline_changed");
+        auditRow.TargetType.Should().Be("weekly_reporting_rule");
+        auditRow.TargetId.Should().Be("2026-03-30");
+    }
+
+    [Fact]
+    public async Task SettingsPage_PreviewWeeklyDeadline_UsesWorkspaceHolidayCalendar()
+    {
+        await using var context = await CreateContextAsync();
+        var actorUserId = await SeedAdministratorAsync(context, "atelier-admin");
+        context.HolidayCalendarEntries.Add(new HolidayCalendarEntry
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = await GetWorkspaceIdAsync(context, actorUserId),
+            Date = new DateOnly(2026, 4, 6),
+            Name = "Observed holiday",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await context.SaveChangesAsync();
+
+        var model = new IndexModel(context, new UserBindingService(context))
+        {
+            WeeklyDeadlineInput = new IndexModel.WeeklyDeadlinePreviewInput
+            {
+                ReportingWeekStartDate = new DateOnly(2026, 3, 30),
+                ConfiguredDeadline = new DateTimeOffset(2026, 4, 5, 18, 0, 0, TimeSpan.FromHours(8)),
+                OverrideDeadline = new DateTimeOffset(2026, 4, 6, 18, 0, 0, TimeSpan.FromHours(8)),
+                DeadlineDisabled = false,
+            },
+        };
+
+        model.PageContext = CreatePageContext(actorUserId);
+
+        var result = await model.OnPostPreviewWeeklyDeadlineAsync(CancellationToken.None);
+
+        result.Should().BeOfType<PageResult>();
+        model.WeeklyDeadlinePreview.Should().NotBeNull();
+        model.WeeklyDeadlinePreview!.EffectiveDeadline.Should().Be(new DateTimeOffset(2026, 4, 7, 18, 0, 0, TimeSpan.FromHours(8)));
+        model.NotificationPreviewEvents.Should().OnlyContain(evt =>
+            evt.Type == NotificationType.DeadlineChanged ||
+            evt.Type == NotificationType.DeadlineDisabledForWeek);
+    }
+
+    [Fact]
+    public async Task SettingsPage_ApplyWeeklyDeadlineChange_RejectsNoOpSubmission()
+    {
+        await using var context = await CreateContextAsync();
+        var actorUserId = await SeedAdministratorAsync(context, "atelier-admin");
+        var model = new IndexModel(context, new UserBindingService(context))
+        {
+            WeeklyDeadlineInput = new IndexModel.WeeklyDeadlinePreviewInput
+            {
+                ReportingWeekStartDate = new DateOnly(2026, 3, 30),
+                ConfiguredDeadline = new DateTimeOffset(2026, 4, 5, 18, 0, 0, TimeSpan.FromHours(8)),
+                OverrideDeadline = null,
+                DeadlineDisabled = false,
+            },
+        };
+
+        model.PageContext = CreatePageContext(actorUserId);
+
+        var result = await model.OnPostApplyWeeklyDeadlineAsync(CancellationToken.None);
+
+        result.Should().BeOfType<PageResult>();
+        model.StatusMessage.Should().Be("Provide an override or disable the deadline before recording a change.");
+        (await context.AuditLogs.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SettingsPage_OnGet_DoesNotFabricateNotificationPreviewEvents()
+    {
+        await using var context = await CreateContextAsync();
+        var actorUserId = await SeedAdministratorAsync(context, "atelier-admin");
+        var model = new IndexModel(context, new UserBindingService(context));
+
+        model.PageContext = CreatePageContext(actorUserId);
+
+        await model.OnGetAsync();
+
+        model.NotificationPreviewEvents.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task BindAsync_RejectsEmptyEnterpriseWeChatUserId()
     {
         await using var context = await CreateContextAsync();
@@ -272,5 +413,75 @@ public sealed class EnterpriseWeChatAuthTests : IClassFixture<TestAppFactory>
 
         await context.SaveChangesAsync();
         return userId;
+    }
+
+    private static async Task<Guid> SeedAdministratorAsync(AtelierDbContext context, string enterpriseWeChatUserId)
+    {
+        var workspaceId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var createdAt = DateTimeOffset.UtcNow;
+
+        context.Workspaces.Add(new Workspace
+        {
+            Id = workspaceId,
+            Name = $"Workspace-{workspaceId:N}",
+            CreatedAt = createdAt,
+        });
+
+        context.Teams.Add(new Team
+        {
+            Id = teamId,
+            WorkspaceId = workspaceId,
+            Name = $"Team-{teamId:N}",
+            CreatedAt = createdAt,
+        });
+
+        context.Users.Add(new User
+        {
+            Id = userId,
+            WorkspaceId = workspaceId,
+            TeamId = teamId,
+            EnterpriseWeChatUserId = enterpriseWeChatUserId,
+            DisplayName = "Admin",
+            Role = UserRole.Administrator,
+            CreatedAt = createdAt,
+        });
+
+        await context.SaveChangesAsync();
+
+        var team = await context.Teams.SingleAsync(item => item.Id == teamId);
+        team.TeamLeadUserId = userId;
+        await context.SaveChangesAsync();
+
+        return userId;
+    }
+
+    private static PageContext CreatePageContext(Guid userId)
+    {
+        var httpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                new Claim(ClaimTypes.Role, UserRole.Administrator.ToString()),
+            ],
+            authenticationType: "TestAuth",
+            nameType: ClaimTypes.Name,
+            roleType: ClaimTypes.Role)),
+        };
+
+        return new PageContext
+        {
+            HttpContext = httpContext,
+        };
+    }
+
+    private static async Task<Guid> GetWorkspaceIdAsync(AtelierDbContext context, Guid userId)
+    {
+        return await context.Users
+            .Where(user => user.Id == userId)
+            .Select(user => user.WorkspaceId)
+            .SingleAsync();
     }
 }

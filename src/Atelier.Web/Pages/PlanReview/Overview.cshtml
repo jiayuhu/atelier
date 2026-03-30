@@ -1,0 +1,31 @@
+@page
+@model Atelier.Web.Pages.PlanReview.OverviewModel
+
+<main>
+    <h1>Plan Review Overview</h1>
+    <p>Use the plan review workflow to move from planning through reporting, analysis, reviews, and revisions.</p>
+
+    <section>
+        <h2>Current Month</h2>
+        <p>@Model.CurrentMonthLabel</p>
+        <p>@Model.CurrentMonthSummary</p>
+    </section>
+
+    <section>
+        <h2>Notification Inbox</h2>
+        <partial name="_NotificationInbox" model="Model.NotificationInbox" />
+    </section>
+
+    <section>
+        <h2>Navigation</h2>
+        <ul>
+        @foreach (var link in Model.NavigationLinks)
+        {
+            <li>
+                <a href="@link.Path">@link.Label</a>
+                <span>- @link.Description</span>
+            </li>
+        }
+        </ul>
+    </section>
+</main>

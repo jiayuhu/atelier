@@ -2,7 +2,6 @@ using Atelier.Web.Data;
 using Atelier.Web.Domain.Platform;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Data.Sqlite;
 
 namespace Atelier.Web.Data.Seed
 {
@@ -62,7 +61,11 @@ public static class SeedData
             });
     }
 
-    public static async Task InitializeAsync(AtelierDbContext context, IConfiguration? configuration = null, CancellationToken cancellationToken = default)
+    public static async Task InitializeAsync(
+        AtelierDbContext context,
+        IConfiguration? configuration = null,
+        CancellationToken cancellationToken = default,
+        bool backfillHolidays = true)
     {
         var blueprint = BuildBlueprint(configuration);
 
@@ -123,7 +126,10 @@ public static class SeedData
             await context.SaveChangesAsync(cancellationToken);
         }
 
-        await BackfillHolidayEntriesAsync(context, workspace.Id, blueprint, cancellationToken);
+        if (backfillHolidays)
+        {
+            await BackfillHolidayEntriesAsync(context, workspace.Id, blueprint, cancellationToken);
+        }
     }
 
     public static async Task EnsureSchemaAsync(AtelierDbContext context, CancellationToken cancellationToken = default)
@@ -169,7 +175,7 @@ public static class SeedData
         }
     }
 
-    private static async Task BackfillHolidayEntriesAsync(
+    public static async Task BackfillHolidayEntriesAsync(
         AtelierDbContext context,
         Guid workspaceId,
         SeedBlueprint blueprint,
@@ -256,6 +262,7 @@ public static class SeedData
 
         return false;
     }
+
 }
 }
 

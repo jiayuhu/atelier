@@ -1,0 +1,35 @@
+@page
+@model Atelier.Web.Pages.PlanReview.Revisions.IndexModel
+
+<main>
+    <h1>Plan Revisions</h1>
+    <p>Deterministic, evidence-backed monthly revision suggestions for the next draft.</p>
+
+    <p>
+        <a href="@Model.OverviewPath">Back to Overview</a>
+    </p>
+
+    <nav>
+        <a href="/PlanReview/MonthlyPlans">Monthly Plans</a>
+        <a href="/PlanReview/WeeklyReports">Weekly Reports</a>
+        <a href="/PlanReview/MonthlyReviews">Monthly Reviews</a>
+        <a href="/PlanReview/Revisions">Revisions</a>
+    </nav>
+
+    <section>
+        <form method="post" asp-page-handler="Generate">
+            <button type="submit">Generate Suggestions</button>
+        </form>
+
+        <form method="post" asp-page-handler="Apply">
+            <button type="submit">Apply Selected Revisions</button>
+        </form>
+
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <p>@Model.StatusMessage</p>
+        }
+
+        <p>@Model.NextMonthDraftPreview</p>
+    </section>
+</main>

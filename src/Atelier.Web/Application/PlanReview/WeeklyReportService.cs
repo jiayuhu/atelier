@@ -211,7 +211,13 @@ public static class WeeklyReportService
 
             if (input.LinkedKeyResultId.HasValue)
             {
-                linkedUpdateId = krUpdates.Single(update => update.KeyResultId == input.LinkedKeyResultId.Value).Id;
+                var linkedUpdate = krUpdates.SingleOrDefault(update => update.KeyResultId == input.LinkedKeyResultId.Value);
+                if (linkedUpdate is null)
+                {
+                    throw new InvalidOperationException("Blocker links to a key result update that was not submitted in this report.");
+                }
+
+                linkedUpdateId = linkedUpdate.Id;
             }
 
             blockers.Add(new Blocker

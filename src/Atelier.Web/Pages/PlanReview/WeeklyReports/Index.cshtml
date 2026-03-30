@@ -5,6 +5,50 @@
     <h1>Weekly Reports</h1>
     <p>Draft, submit, and resubmit weekly status against the active monthly plan.</p>
 
+    <p>
+        <a href="@Model.OverviewPath">Back to Overview</a>
+    </p>
+
+    <nav>
+        <a href="/PlanReview/MonthlyPlans">Monthly Plans</a>
+        <a href="/PlanReview/WeeklyReports">Weekly Reports</a>
+        <a href="/PlanReview/MonthlyReviews">Monthly Reviews</a>
+        <a href="/PlanReview/Revisions">Revisions</a>
+    </nav>
+
+    <section>
+        <h2>Weekly Report Workflow</h2>
+        <form method="post" asp-page-handler="Submit">
+            <label asp-for="Input.ReportingWeekStartDate">Reporting Week Start</label>
+            <input asp-for="Input.ReportingWeekStartDate" />
+
+            <label asp-for="Input.WeeklyProgress">Weekly Progress</label>
+            <textarea asp-for="Input.WeeklyProgress"></textarea>
+
+            <label asp-for="Input.KeyResultCurrentValue">KR Current Value</label>
+            <input asp-for="Input.KeyResultCurrentValue" />
+
+            <label asp-for="Input.NextWeekPlan">Next Week Plan</label>
+            <textarea asp-for="Input.NextWeekPlan"></textarea>
+
+            <label asp-for="Input.AdditionalNotes">Additional Notes</label>
+            <textarea asp-for="Input.AdditionalNotes"></textarea>
+
+            <label asp-for="Input.Blockers">Blockers</label>
+            <textarea asp-for="Input.Blockers"></textarea>
+
+            <label asp-for="Input.UnlinkedWorkItems">Unlinked Work Items</label>
+            <textarea asp-for="Input.UnlinkedWorkItems"></textarea>
+
+            <button type="submit">Submit Report</button>
+        </form>
+
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <p>@Model.StatusMessage</p>
+        }
+    </section>
+
     <table>
         <thead>
             <tr>

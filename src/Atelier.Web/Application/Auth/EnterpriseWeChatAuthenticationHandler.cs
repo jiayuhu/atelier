@@ -7,6 +7,7 @@ namespace Atelier.Web.Application.Auth;
 public sealed class EnterpriseWeChatAuthenticationHandler : AuthenticationHandler<EnterpriseWeChatOAuthOptions>
 {
     public const string SchemeName = "EnterpriseWeChat";
+    public const string EnterpriseWeChatCookieName = "atelier_enterprise_wechat_user_id";
 
     private readonly EnterpriseWeChatAuthService _authService;
 
@@ -22,11 +23,7 @@ public sealed class EnterpriseWeChatAuthenticationHandler : AuthenticationHandle
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var enterpriseWeChatUserId = Request.Headers["X-Enterprise-WeChat-UserId"].ToString();
-        if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
-        {
-            enterpriseWeChatUserId = Request.Query["enterpriseWeChatUserId"].ToString();
-        }
+        var enterpriseWeChatUserId = ResolveEnterpriseWeChatUserId();
 
         if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
         {
@@ -63,11 +60,7 @@ public sealed class EnterpriseWeChatAuthenticationHandler : AuthenticationHandle
             return;
         }
 
-        var enterpriseWeChatUserId = Request.Headers["X-Enterprise-WeChat-UserId"].ToString();
-        if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
-        {
-            enterpriseWeChatUserId = Request.Query["enterpriseWeChatUserId"].ToString();
-        }
+        var enterpriseWeChatUserId = ResolveEnterpriseWeChatUserId();
 
         if (string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
         {
@@ -88,5 +81,22 @@ public sealed class EnterpriseWeChatAuthenticationHandler : AuthenticationHandle
 
         var destination = $"/Auth/WaitingForBinding?enterpriseWeChatUserId={Uri.EscapeDataString(enterpriseWeChatUserId)}";
         Context.Response.Redirect(destination);
+    }
+
+    private string ResolveEnterpriseWeChatUserId()
+    {
+        var enterpriseWeChatUserId = Request.Headers["X-Enterprise-WeChat-UserId"].ToString();
+        if (!string.IsNullOrWhiteSpace(enterpriseWeChatUserId))
+        {
+            return enterpriseWeChatUserId;
+        }
+
+        if (Request.Cookies.TryGetValue(EnterpriseWeChatCookieName, out var cookieValue)
+            && !string.IsNullOrWhiteSpace(cookieValue))
+        {
+            return cookieValue;
+        }
+
+        return Request.Query["enterpriseWeChatUserId"].ToString();
     }
 }

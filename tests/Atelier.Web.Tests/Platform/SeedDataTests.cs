@@ -1,6 +1,7 @@
 using Atelier.Web.Data;
 using Atelier.Web.Data.Seed;
 using Atelier.Web.Domain.Platform;
+using Atelier.Web.Application.Platform;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -219,6 +220,99 @@ WHERE Id = '{deliveryTeamId}';
         workspaceCount.Should().Be(1);
         teamCount.Should().Be(2);
         adminCount.Should().Be(1);
+        holidayCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task StartupDatabaseInitializer_BackfillsHolidayCalendarIntoExistingBootstrappedSqliteDatabase()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"atelier-holiday-backfill-{Guid.NewGuid():N}.db");
+
+        await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+        {
+            await connection.OpenAsync();
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = @"
+CREATE TABLE Workspaces (
+    Id TEXT NOT NULL CONSTRAINT PK_Workspaces PRIMARY KEY,
+    Name TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL
+);
+
+CREATE TABLE Teams (
+    Id TEXT NOT NULL CONSTRAINT PK_Teams PRIMARY KEY,
+    WorkspaceId TEXT NOT NULL,
+    Name TEXT NOT NULL,
+    TeamLeadUserId TEXT NULL,
+    CreatedAt TEXT NOT NULL,
+    CONSTRAINT FK_Teams_Workspaces_WorkspaceId FOREIGN KEY (WorkspaceId) REFERENCES Workspaces (Id) ON DELETE RESTRICT,
+    CONSTRAINT FK_Teams_Users_TeamLeadUserId FOREIGN KEY (TeamLeadUserId) REFERENCES Users (Id) ON DELETE RESTRICT
+);
+
+CREATE TABLE Users (
+    Id TEXT NOT NULL CONSTRAINT PK_Users PRIMARY KEY,
+    WorkspaceId TEXT NOT NULL,
+    TeamId TEXT NOT NULL,
+    EnterpriseWeChatUserId TEXT NOT NULL,
+    DisplayName TEXT NOT NULL,
+    Role INTEGER NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    CONSTRAINT FK_Users_Teams_TeamId FOREIGN KEY (TeamId) REFERENCES Teams (Id) ON DELETE RESTRICT,
+    CONSTRAINT FK_Users_Workspaces_WorkspaceId FOREIGN KEY (WorkspaceId) REFERENCES Workspaces (Id) ON DELETE RESTRICT
+);
+
+CREATE TABLE HolidayCalendarEntries (
+    Id TEXT NOT NULL CONSTRAINT PK_HolidayCalendarEntries PRIMARY KEY,
+    WorkspaceId TEXT NOT NULL,
+    Date TEXT NOT NULL,
+    Name TEXT NOT NULL,
+    CreatedAt TEXT NOT NULL,
+    CONSTRAINT FK_HolidayCalendarEntries_Workspaces_WorkspaceId FOREIGN KEY (WorkspaceId) REFERENCES Workspaces (Id) ON DELETE RESTRICT
+);
+
+CREATE UNIQUE INDEX IX_Teams_WorkspaceId_Name ON Teams (WorkspaceId, Name);
+CREATE UNIQUE INDEX IX_Users_EnterpriseWeChatUserId ON Users (EnterpriseWeChatUserId);
+CREATE UNIQUE INDEX IX_HolidayCalendarEntries_WorkspaceId_Date ON HolidayCalendarEntries (WorkspaceId, Date);
+";
+
+            await command.ExecuteNonQueryAsync();
+
+            var workspaceId = Guid.NewGuid();
+            var deliveryTeamId = Guid.NewGuid();
+            var operationsTeamId = Guid.NewGuid();
+            var adminId = Guid.NewGuid();
+            var createdAt = DateTimeOffset.UtcNow.ToString("O");
+
+            command.CommandText = $@"
+INSERT INTO Workspaces (Id, Name, CreatedAt)
+VALUES ('{workspaceId}', 'Atelier', '{createdAt}');
+
+INSERT INTO Teams (Id, WorkspaceId, Name, TeamLeadUserId, CreatedAt)
+VALUES ('{deliveryTeamId}', '{workspaceId}', 'Delivery', NULL, '{createdAt}');
+
+INSERT INTO Teams (Id, WorkspaceId, Name, TeamLeadUserId, CreatedAt)
+VALUES ('{operationsTeamId}', '{workspaceId}', 'Operations', NULL, '{createdAt}');
+
+INSERT INTO Users (Id, WorkspaceId, TeamId, EnterpriseWeChatUserId, DisplayName, Role, CreatedAt)
+VALUES ('{adminId}', '{workspaceId}', '{deliveryTeamId}', 'atelier-admin', 'Atelier Admin', 1, '{createdAt}');
+
+UPDATE Teams
+SET TeamLeadUserId = '{adminId}'
+WHERE Id = '{deliveryTeamId}';";
+
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var options = new DbContextOptionsBuilder<AtelierDbContext>()
+            .UseSqlite($"Data Source={databasePath}")
+            .Options;
+
+        await using var context = new AtelierDbContext(options);
+
+        await StartupDatabaseInitializer.InitializeAsync(context);
+
+        var holidayCount = await context.HolidayCalendarEntries.CountAsync();
         holidayCount.Should().Be(2);
     }
 

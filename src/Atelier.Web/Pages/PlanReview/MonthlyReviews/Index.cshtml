@@ -1,0 +1,74 @@
+@page
+@model Atelier.Web.Pages.PlanReview.MonthlyReviews.IndexModel
+
+<main>
+    <h1>Monthly Reviews</h1>
+    <p>Team leads prepare drafts and administrators finalize month-end reviews.</p>
+
+    <p>
+        <a href="@Model.OverviewPath">Back to Overview</a>
+    </p>
+
+    <nav>
+        <a href="/PlanReview/MonthlyPlans">Monthly Plans</a>
+        <a href="/PlanReview/WeeklyReports">Weekly Reports</a>
+        <a href="/PlanReview/MonthlyReviews">Monthly Reviews</a>
+        <a href="/PlanReview/Revisions">Revisions</a>
+    </nav>
+
+    <section>
+        <h2>Review Workflow</h2>
+        <form method="post" asp-page-handler="SaveDraft">
+            <label asp-for="Input.DraftRating">Draft Rating</label>
+            <select asp-for="Input.DraftRating">
+                <option>Exceeds Expectations</option>
+                <option selected>Meets Expectations</option>
+                <option>Needs Improvement</option>
+            </select>
+            <button type="submit">Save Draft</button>
+        </form>
+
+        <form method="post" asp-page-handler="ManagerReview">
+            <button type="submit">Mark Manager Reviewed</button>
+        </form>
+
+        <form method="post" asp-page-handler="Finalize">
+            <label asp-for="Input.FinalRating">Final Rating</label>
+            <select asp-for="Input.FinalRating">
+                <option>Exceeds Expectations</option>
+                <option selected>Meets Expectations</option>
+                <option>Needs Improvement</option>
+            </select>
+            <button type="submit">Finalize Review</button>
+        </form>
+
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <p>@Model.StatusMessage</p>
+        }
+    </section>
+
+    <table>
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Status</th>
+                <th>Draft rating</th>
+                <th>Final rating</th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var review in Model.Reviews)
+        {
+            <tr>
+                <td>@review.UserId</td>
+                <td>@review.Status</td>
+                <td>@review.DraftRating</td>
+                <td>@(string.IsNullOrWhiteSpace(review.FinalRating) ? "Pending" : review.FinalRating)</td>
+                <td>@review.UpdatedAt</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</main>

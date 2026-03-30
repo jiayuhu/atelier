@@ -25,4 +25,46 @@
     {
         <p>@Model.StatusMessage</p>
     }
+
+    <section>
+        <h2>Weekly deadline rule</h2>
+        <p>Preview and record an override or disablement for a reporting week.</p>
+
+        <form method="post" asp-page-handler="PreviewWeeklyDeadline">
+            <label asp-for="WeeklyDeadlineInput.ReportingWeekStartDate">Reporting week start</label>
+            <input asp-for="WeeklyDeadlineInput.ReportingWeekStartDate" />
+
+            <label asp-for="WeeklyDeadlineInput.ConfiguredDeadline">Configured deadline</label>
+            <input asp-for="WeeklyDeadlineInput.ConfiguredDeadline" />
+
+            <label asp-for="WeeklyDeadlineInput.OverrideDeadline">Override deadline</label>
+            <input asp-for="WeeklyDeadlineInput.OverrideDeadline" />
+
+            <label asp-for="WeeklyDeadlineInput.DeadlineDisabled">Disable deadline</label>
+            <input asp-for="WeeklyDeadlineInput.DeadlineDisabled" />
+
+            <button type="submit">Preview deadline</button>
+        </form>
+
+        <form method="post" asp-page-handler="ApplyWeeklyDeadline">
+            <input type="hidden" asp-for="WeeklyDeadlineInput.ReportingWeekStartDate" />
+            <input type="hidden" asp-for="WeeklyDeadlineInput.ConfiguredDeadline" />
+            <input type="hidden" asp-for="WeeklyDeadlineInput.OverrideDeadline" />
+            <input type="hidden" asp-for="WeeklyDeadlineInput.DeadlineDisabled" />
+            <button type="submit">Record deadline change</button>
+        </form>
+
+        @if (Model.WeeklyDeadlinePreview is not null)
+        {
+            <p>Planned deadline: @Model.WeeklyDeadlinePreview.PlannedDeadline</p>
+            <p>Effective deadline: @Model.WeeklyDeadlinePreview.EffectiveDeadline</p>
+            <p>Attributed month: @Model.WeeklyDeadlinePreview.AttributedMonth</p>
+        }
+    </section>
+
+    <section>
+        <h2>Deadline notification preview</h2>
+        <p>Preview the in-app notifications that would be sent for the current deadline change.</p>
+        <partial name="_NotificationInbox" model="Model.NotificationPreviewEvents" />
+    </section>
 </main>

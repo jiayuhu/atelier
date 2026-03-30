@@ -136,6 +136,29 @@ public sealed class WeeklyReportServiceTests
     }
 
     [Fact]
+    public void Submit_RejectsBlockerLinkedToKeyResultWithoutSubmittedUpdate()
+    {
+        var plan = CreateActivePlan();
+        var keyResultId = plan.Goals.Single().KeyResults.Single().Id;
+        var submission = new WeeklyReportSubmissionInput(
+            plan.CreatedByUserId,
+            new DateOnly(2026, 3, 30),
+            CreateDeadlineResult(),
+            "Delivered blocker cleanup",
+            "Finish validation",
+            "Need shared QA coverage",
+            new DateTimeOffset(2026, 4, 6, 9, 0, 0, TimeSpan.FromHours(8)),
+            [],
+            [new WeeklyReportBlockerInput("Need infra access", "Validation is blocked", false, keyResultId)],
+            []);
+
+        var act = () => WeeklyReportService.SubmitOrResubmit(existingReport: null, submission, plan);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("Blocker links to a key result update that was not submitted in this report.*");
+    }
+
+    [Fact]
     public void ClosedMonth_PreventsFurtherReportEdits()
     {
         var plan = CreateActivePlan();
