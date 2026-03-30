@@ -1,5 +1,36 @@
 # Atelier
 
+Atelier 是一个面向团队内部协作的计划与复盘平台，目标是把月计划、周报、月度分析、主管评审和计划修订串联成一个可追踪、可复盘、可审计的闭环流程，帮助团队建立更清晰的目标管理与执行反馈机制。
+
+当前仓库实现的是基于 .NET 的 Plan and Review 模块 MVP。系统已经支持从月计划创建与激活、周报提报与重提、月度分析与评审，到修订生成与应用的完整工作流，并补充了截止时间规则、节假日处理、通知预览、审计日志、启动种子数据和本地迁移支持，适合用于内部试用、验收以及后续迭代开发。
+
+## 当前已实现能力
+
+- 月计划的创建、激活、调整与生命周期控制
+- 基于激活月计划的周报提报、重提与截止时间处理
+- 月度分析、主管评审与结果固化
+- 计划修订建议生成与修订应用流程
+- 站内通知预览与关键操作审计日志
+- 本地 SQLite 启动、EF Core 迁移与启动初始化支持
+
+## 技术栈
+
+- ASP.NET Core Razor Pages
+- Entity Framework Core
+- SQLite（本地开发）
+- 企业微信身份绑定与引导登录
+
+## 仓库结构
+
+- `src/Atelier.Web`：应用主代码
+- `tests/Atelier.Web.Tests`：单元测试与集成测试
+- `tests/Atelier.Web.Playwright`：端到端自动化测试
+- `src/Atelier.Web/Data/Migrations`：EF Core 迁移文件
+
+## 当前状态
+
+当前仓库已经完成 Plan and Review 模块的 .NET MVP 开发，并通过自动化测试与端到端 happy path 验证，可用于本地试用和后续验收。
+
 ## Local NuGet restore
 
 This repo checks in `.nupkgs/` so restore can run in this environment without relying on external package feeds.
