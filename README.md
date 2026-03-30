@@ -31,6 +31,24 @@ Atelier 是一个面向团队内部协作的计划与复盘平台，目标是把
 
 当前仓库已经完成 Plan and Review 模块的 .NET MVP 开发，并通过自动化测试与端到端 happy path 验证，可用于本地试用和后续验收。
 
+## Quick Start
+
+1. 参考 `.env.example` 配置本地环境变量。
+2. 执行 `dotnet restore Atelier.sln --configfile NuGet.Config` 恢复依赖。
+3. 执行 `dotnet ef database update --project src/Atelier.Web/Atelier.Web.csproj` 初始化本地数据库。
+4. 执行 `dotnet run --project src/Atelier.Web/Atelier.Web.csproj` 启动应用。
+5. 打开浏览器访问本地站点并进入 Plan and Review 相关页面开始试用。
+
+## 建议试用路径
+
+建议按以下顺序体验系统主流程：
+
+1. 创建并激活月计划
+2. 提交周报并查看截止时间效果
+3. 查看月度分析与主管评审流程
+4. 体验修订生成与应用流程
+5. 在 Settings 页面查看通知预览与规则配置
+
 ## Local NuGet restore
 
 This repo checks in `.nupkgs/` so restore can run in this environment without relying on external package feeds.
