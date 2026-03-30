@@ -49,6 +49,26 @@ Atelier 是一个面向团队内部协作的计划与复盘平台，目标是把
 4. 体验修订生成与应用流程
 5. 在 Settings 页面查看通知预览与规则配置
 
+## Roadmap
+
+### 已完成
+
+- Plan and Review 模块 MVP 主流程开发
+- 本地 SQLite 启动与 EF Core 迁移支持
+- 单元测试、集成测试与端到端 happy path 验证
+
+### 下一步
+
+- 更完整的企业微信登录接入与组织侧联动
+- PostgreSQL 兼容与部署准备
+- 更完整的通知、提醒与协作能力
+
+### 后续演进
+
+- 更丰富的组织、角色与权限能力
+- 更完整的指标分析、报表与运营支持
+- 面向更长期迭代的内部平台化能力扩展
+
 ## Local NuGet restore
 
 This repo checks in `.nupkgs/` so restore can run in this environment without relying on external package feeds.
