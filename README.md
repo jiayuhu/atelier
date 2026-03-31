@@ -69,6 +69,22 @@ Atelier 是一个面向团队内部协作的计划与复盘平台，目标是把
 - 更完整的指标分析、报表与运营支持
 - 面向更长期迭代的内部平台化能力扩展
 
+## Testing
+
+常用验证命令如下：
+
+```bash
+dotnet build Atelier.sln
+dotnet test tests/Atelier.Web.Tests/Atelier.Web.Tests.csproj
+dotnet test tests/Atelier.Web.Playwright/Atelier.Web.Playwright.csproj
+dotnet ef database update --project src/Atelier.Web/Atelier.Web.csproj
+```
+
+如果只想快速验证核心链路，建议至少执行：
+
+- `dotnet test tests/Atelier.Web.Tests/Atelier.Web.Tests.csproj`
+- `dotnet test tests/Atelier.Web.Playwright/Atelier.Web.Playwright.csproj`
+
 ## Local NuGet restore
 
 This repo checks in `.nupkgs/` so restore can run in this environment without relying on external package feeds.
